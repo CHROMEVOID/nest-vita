@@ -35,7 +35,7 @@ That's **Nest**. Put your shows, movies and manga on the memory card, and it qui
 
 ⏭️ **The small, nice things.**
 - **Skip intro.** Mark it once and R skips it on every episode.
-- **It remembers where you stopped**, even when you fall asleep halfway through. It's very understanding about that.
+- **It remembers where you stopped**, so the next episode is always one button away.
 - **Subtitles and picture size**, saved for each show.
 - **A little "your year" recap.** Gently tells you how many hours went into that one anime.
 - **A storage page** that points out, kindly, which show is hogging your memory card.
