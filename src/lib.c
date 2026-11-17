@@ -292,7 +292,7 @@ int lib_continue(int kind, int secret, int *out, int max) {
     for (int i = 0; i < L.nt && n < max; i++) {
         Title *t = &L.t[i];
         if (!visible(t, secret) || t->resume < 0) continue;
-        if (kind == -2 ? t->kind == KIND_BOOK : kind >= 0 && t->kind != kind) continue;
+        if (kind == -2 ? t->kind != KIND_BOOK : kind >= 0 && t->kind != kind) continue; /* -2 = books only */
         out[n++] = i;
     }
     sort_idx(out, n, SORT_PROGRESS);
@@ -304,7 +304,7 @@ int lib_recent(int kind, int secret, int *out, int max) {
     for (int i = 0; i < L.nt && n < max * 4 && n < 400; i++) {
         Title *t = &L.t[i];
         if (!visible(t, secret)) continue;
-        if (kind == -2 ? t->kind == KIND_BOOK : kind >= 0 && t->kind != kind) continue;
+        if (kind == -2 ? t->kind != KIND_BOOK : kind >= 0 && t->kind != kind) continue; /* -2 = books only */
         out[n++] = i;
     }
     sort_idx(out, n, SORT_RECENT);

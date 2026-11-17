@@ -386,9 +386,10 @@ static void draw_hero(float y0, float dt, int focused) {
     vita2d_texture *logo = t->logo ? img_get(t->logo, 380, 120, &fade) : NULL;
     if (logo && fade > 0) {
         float lw = vita2d_texture_get_width(logo), lh = vita2d_texture_get_height(logo);
-        float s = fminf(340 / lw, 92 / lh);
-        vita2d_draw_texture_tint_scale(logo, x, y + 6 + (92 - lh * s), s, s, col_a(0xFFFFFFFF, ta * fade));
-        y += 112;
+        /* logos come in every shape: keep them inside a box that leaves room for the text below */
+        float s = fminf(300 / lw, 72 / lh);
+        vita2d_draw_texture_tint_scale(logo, x, y + 6 + (72 - lh * s), s, s, col_a(0xFFFFFFFF, ta * fade));
+        y += 88;
     } else {
         int size = T->display_font == 2 ? 30 : 40;
         int lines = text_wrap_count(F_DISPLAY, size, 520, t->title);
@@ -428,10 +429,13 @@ static void draw_hero(float y0, float dt, int focused) {
         text(F_META, 14, x + mw + 30, y + 8, col_a(T->text2, ta), sc);
     }
     y += 16;
-    if (t->overview) text_wrap(F_REG, 14, x, y + 16, 460, 20, 2, col_a(T->text2, ta * 0.9f), t->overview);
-
     /* buttons */
     float by = y0 + HERO_H - 66;
+    /* description: only as many lines as fit above the buttons */
+    int ov_lines = (int)((by - 10 - (y + 2)) / 20);
+    if (ov_lines > 2) ov_lines = 2;
+    if (t->overview && ov_lines > 0) text_wrap(F_REG, 14, x, y + 16, 460, 20, ov_lines, col_a(T->text2, ta * 0.9f), t->overview);
+
     char lab[64];
     if (t->resume >= 0 && t->kind != KIND_MOVIE) {
         char el[32];
