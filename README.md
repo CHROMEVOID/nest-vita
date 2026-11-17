@@ -13,7 +13,7 @@ No subscription. No ads. Nobody asking if you're still watching.</p>
   <a href="https://www.tiktok.com/@chr0m3void"><img src="https://img.shields.io/badge/TikTok-@chr0m3void-111?style=for-the-badge&logo=tiktok" alt="TikTok"></a>
 </p>
 
-<p align="center"><img src="screenshots/1-home.png" width="760" alt="Nest home screen"></p>
+<p align="center"><img src="screenshots/home-real.png" width="760" alt="Nest home screen"></p>
 
 Hey, come on in. Get comfy.
 
@@ -45,8 +45,8 @@ That's **Nest**. Put your shows, movies and manga on the memory card, and it qui
 
 <table>
   <tr>
-    <td><img src="screenshots/3-series.png" alt="A show page"></td>
-    <td><img src="screenshots/2-shelves.png" alt="Shelves"></td>
+    <td><img src="screenshots/show-page-real.png" alt="A show page"></td>
+    <td><img src="screenshots/shows-real.png" alt="Shelves"></td>
   </tr>
 </table>
 
