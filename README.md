@@ -4,7 +4,8 @@
 
 <h1 align="center">Nest</h1>
 
-<p align="center"><b>I turned my PS Vita into a tiny Netflix.<br>No subscription, no ads, no "are you still watching?"</b></p>
+<p align="center"><b>A tiny Netflix for your PS Vita.</b><br>
+No subscription. No ads. Nobody asking if you're still watching.</p>
 
 <p align="center">
   <a href="https://github.com/CHROMEVOID/nest-vita/releases/latest"><img src="https://img.shields.io/badge/Download-Nest.vpk-8b7cf6?style=for-the-badge" alt="Download Nest.vpk"></a>
@@ -14,33 +15,33 @@
 
 <p align="center"><img src="screenshots/1-home.png" width="760" alt="Nest home screen"></p>
 
-Hi 👋
+Hey, come on in. Get comfy.
 
-So here's the story. I was in bed, scrolling through 40 files called `Show.S01E07.720p.WEB-DL.x264-FINAL-v2.mp4` in the Vita's video app, trying to work out which episode I was on. Somewhere around file 23 I decided I'd rather spend weeks writing an entire app than ever do that again.
+It started on a quiet night. Me, my Vita, and a folder of forty files all called something like `Show.S01E07.720p.WEB-DL.x264-FINAL-v2.mp4`. Somewhere around file 23 I thought, *there has to be a nicer way to do this*. There wasn't, so I made one.
 
-That app is **Nest**. You throw your shows, movies and manga on your memory card, and it turns them into a library that looks like a real streaming service. The Vita has a gorgeous OLED screen; it deserves better than a list of file names.
+That's **Nest**. Put your shows, movies and manga on the memory card, and it quietly turns them into a library that looks and feels like a proper streaming app. No fuss. You just pick something and press play.
 
 ## What's inside
 
-🎬 **It looks like an actual app.** Big artwork, show logos, *Continue Watching*, *Up Next*, season tabs. Your friends will ask what app that is. You can say you made it. I won't tell.
+🎬 **It looks like a real app.** Big artwork, show logos, *Continue Watching*, *Up Next*, a tab for each season. That lovely Vita screen finally has something worth showing off.
 
-🧠 **It sorts everything for you.** Nest reads the file names and works out what's a **movie** and what's a **show**, then puts every episode in the right season. Even the cursed ones with `1080p.BluRay.x264.YIFY` glued to the end. Especially those.
+🧠 **It tidies up for you.** Nest reads your file names and works out what's a **movie** and what's a **show**, then puts every episode in the right season. Even the ones with `1080p.BluRay.x264` stuck on the end. It doesn't mind. It's seen worse.
 
-🖼️ **Real posters and logos.** The free **Nest Metadata** app for your PC fetches the actual poster, logo, backdrop and description for every show and movie. Drag your folder onto it, grab a drink, and come back to a library that looks expensive.
+🖼️ **Real posters and logos.** There's a free little PC app called **Nest Metadata** that fetches the actual poster, logo, backdrop and description for everything you have. Drag your folder onto it, make a cup of tea, and come back to a library that looks like it costs money.
 
-🔒 **A private section.** There's a **Secret** tab behind a PIN for your more… *personal* "shows". 👀 It stays hidden everywhere else in the app. We don't judge. We don't ask. We genuinely don't want to know.
+🔒 **A private section.** There's a **Secret** tab with a PIN for your more… *personal* "shows". It stays tucked away from the rest of the app. We don't judge, and we definitely don't peek.
 
-📖 **It reads too.** Manga, comics, PDFs, ePubs. Right-to-left for manga, two-page spreads, and a long-strip mode for webtoons, so you can read "just one more chapter" at 3am like a responsible adult.
+📖 **It reads, too.** Manga, comics, PDFs and ePubs. Right-to-left for manga, two pages side by side, and one long scroll for webtoons. Perfect for "one more chapter" turning into six.
 
-⏭️ **All the little things.**
-- Skip intro: mark it once per show, then press R forever.
-- It remembers where you stopped, even if you fall asleep mid-episode. Especially then.
-- Subtitles and picture size, saved per show.
-- A "your year" recap, so you can find out exactly how many hours went into that one anime. You may not want to know.
-- A storage page that politely points out which show is eating your memory card.
-- 16 cozy pixel-art lofi scenes moving behind your library, because vibes are a feature.
+⏭️ **The small, nice things.**
+- **Skip intro.** Mark it once and R skips it on every episode.
+- **It remembers where you stopped**, even when you fall asleep halfway through. It's very understanding about that.
+- **Subtitles and picture size**, saved for each show.
+- **A little "your year" recap.** Gently tells you how many hours went into that one anime.
+- **A storage page** that points out, kindly, which show is hogging your memory card.
+- **16 slow, cozy pixel-art scenes** drifting behind your library, like a window with a nice view.
 
-📡 **Watch from your PC** over Wi-Fi *(beta)*. For when your memory card says "no more" and your PC says "I've got you".
+📡 **Watch from your PC** over Wi-Fi *(beta)*, for when your memory card is full and your PC has plenty of room.
 
 <table>
   <tr>
@@ -49,23 +50,23 @@ That app is **Nest**. You throw your shows, movies and manga on your memory card
   </tr>
 </table>
 
-## Get it running (about 2 minutes, I timed it)
+## Setting it up (about two minutes, no rush)
 
-1. Download **[Nest.vpk](https://github.com/CHROMEVOID/nest-vita/releases/latest)** and install it with **VitaShell**. You need a homebrew-enabled Vita; [vita.hacks.guide](https://vita.hacks.guide) walks you through it, and it's easier than it sounds.
-2. Open Nest, pick the folder your videos live in, and go make a snack while it scans.
-3. *(Optional, but honestly do it)* Download **Nest-PC-Tools.zip** from the same page, double-click **Nest Metadata**, and drag your folder in. This is the bit that makes it look like the screenshots.
+1. Download **[Nest.vpk](https://github.com/CHROMEVOID/nest-vita/releases/latest)** and install it with **VitaShell**. You'll need a homebrew-enabled Vita; [vita.hacks.guide](https://vita.hacks.guide) walks you through it, and it's easier than it sounds.
+2. Open Nest, pick the folder your videos are in, and let it look around while you grab a snack.
+3. *(Optional, but you'll be glad you did)* Get **Nest-PC-Tools.zip** from the same page, open **Nest Metadata**, and drag your folder in. That's what gives you the posters and logos in the screenshots.
 
-**One catch:** the Vita only plays **MP4 (H.264 + AAC)**. That's Sony's rule from 2011, not mine; please direct complaints to them. The [guide](docs/GUIDE.md#getting-your-videos-ready) has the one HandBrake setting that fixes it.
+**One small catch:** the Vita only plays **MP4 (H.264 + AAC)**. That's been Sony's rule since 2011, so take it up with them. The [guide](docs/GUIDE.md#getting-your-videos-ready) has the one HandBrake setting that sorts it out.
 
-**→ [The full guide](docs/GUIDE.md)** covers folder layout, posters, streaming from your PC, controls and fixes for when things get weird.
+**→ [The full guide](docs/GUIDE.md)** covers folder layout, posters, watching from your PC, controls, and what to do when something acts up.
 
 ## Say hi
 
-Something broken? [Open an issue](https://github.com/CHROMEVOID/nest-vita/issues) and I'll fix it. I'm one person with a Vita and too much free time, so be nice 🙂
+Found a bug? [Let me know](https://github.com/CHROMEVOID/nest-vita/issues) and I'll fix it. It's just me, a Vita and a lot of evenings, so be kind 🙂
 
-And if you set it up, I'd genuinely love to see your library. Tag me on TikTok **[@chr0m3void](https://www.tiktok.com/@chr0m3void)**. Nothing from the Secret tab, please.
+And if you set it up, I'd really love to see your library. Come say hi on TikTok **[@chr0m3void](https://www.tiktok.com/@chr0m3void)**. Just maybe not the Secret tab.
 
 ---
 
-<p align="center">Made with too much coffee by <b>chromevoid</b> · <a href="https://www.tiktok.com/@chr0m3void">TikTok @chr0m3void</a> · <a href="LICENSE">MIT</a><br>
+<p align="center">Made slowly and with a lot of tea by <b>chromevoid</b> · <a href="https://www.tiktok.com/@chr0m3void">TikTok @chr0m3void</a> · <a href="LICENSE">MIT</a><br>
 <sub>Nest plays files you already have. It doesn't download or share anything. Metadata comes from <a href="https://www.themoviedb.org">TMDB</a> (not endorsed by TMDB).</sub></p>
