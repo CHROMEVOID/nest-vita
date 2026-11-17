@@ -1,0 +1,10 @@
+build/
+third_party/sqlite/
+*.exe
+tools/__pycache__/
+dist/
+Nest.vpk
+tools/tmdb_key.txt
+tools/nest_pc_server.json
+*.lnk
+*.log

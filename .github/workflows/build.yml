@@ -1,0 +1,67 @@
+name: Build Nest
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Title cleaner tests
+        run: cc -O1 -Wall -I src tests/test_parse.c src/parse.c -o test_parse && ./test_parse
+      - name: Scanner tests
+        run: cc -O1 -Wall -I src tests/test_scan.c src/scan.c src/parse.c -o test_scan && ./test_scan /tmp/nestlib
+
+  vpk:
+    runs-on: ubuntu-latest
+    container: vitasdk/vitasdk:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          (command -v apk >/dev/null && apk add --no-cache curl unzip cmake make pkgconf) || \
+          (apt-get update && apt-get install -y curl unzip cmake make pkg-config) || true
+      - name: Make sure SDK libraries are present
+        run: |
+          for lib in libwebp jansson unrar libjpeg-turbo freetype libpng zlib libvita2d; do
+            if ! ls $VITASDK/arm-vita-eabi/lib | grep -qi "$(echo $lib | sed 's/^lib//;s/-turbo//')"; then
+              echo "installing $lib"; vdpm $lib || true
+            fi
+          done
+          ls $VITASDK/arm-vita-eabi/lib | head -100
+      - name: SQLite amalgamation
+        run: |
+          mkdir -p third_party/sqlite && cd third_party/sqlite
+          curl -sSL -o s.zip https://www.sqlite.org/2024/sqlite-amalgamation-3460100.zip
+          unzip -o -j s.zip && ls
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j4 2>&1 | tee build.log || true
+          if [ ! -f build/Nest.vpk ] && grep -q "Cannot allocate" build.log; then
+            # code segment ends too close to the data segment: pad it past the boundary
+            SEGS=$(arm-vita-eabi-readelf -lW build/Nest | awk '$1=="LOAD"{print $3, $6}')
+            echo "$SEGS"
+            S0=$(echo "$SEGS" | sed -n 1p); S1=$(echo "$SEGS" | sed -n 2p)
+            END0=$(( $(echo $S0 | cut -d' ' -f1) + $(echo $S0 | cut -d' ' -f2) ))
+            START1=$(( $(echo $S1 | cut -d' ' -f1) ))
+            PAD=$(( START1 - END0 + 512 ))
+            echo "gap $((START1 - END0)) -> padding $PAD bytes"
+            cmake -S . -B build -DNEST_PAD=$PAD
+            cmake --build build -j4 2>&1 | tee build.log || true
+          fi
+          if [ ! -f build/Nest.vpk ]; then
+            echo "=== relocations vita-elf-create rejects ==="
+            arm-vita-eabi-readelf -rW build/Nest | grep -E "R_ARM_BASE_PREL|R_ARM_GOT" | head -20 || true
+            arm-vita-eabi-nm -A $VITASDK/arm-vita-eabi/lib/*.a 2>/dev/null | grep -i "_GLOBAL_OFFSET_TABLE_" | head -20 || true
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Nest-vpk
+          path: |
+            build/Nest.vpk
+            build.log
