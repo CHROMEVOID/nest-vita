@@ -25,7 +25,7 @@ That's **Nest**. Put your shows, movies and manga on the memory card, and it qui
 
 🎬 **It looks like a real app.** Big artwork, show logos, *Continue Watching*, *Up Next*, a tab for each season. That lovely Vita screen finally has something worth showing off.
 
-🧠 **It tidies up for you.** Nest reads your file names and works out what's a **movie** and what's a **show**, then puts every episode in the right season. Even the ones with `1080p.BluRay.x264` stuck on the end. It doesn't mind. It's seen worse.
+🧠 **It tidies up for you.** Nest reads your file names and works out what's a **movie** and what's a **show**, then puts every episode in the right season. Even the ones with `1080p.BluRay.x264.10bit.HDR.DDP5.1.REPACK-ICECRACK.FINAL.v2` stuck on the end. It doesn't mind. It's seen worse.
 
 🖼️ **Real posters and logos.** There's a free little PC app called **Nest Metadata** that fetches the actual poster, logo, backdrop and description for everything you have. Drag your folder onto it, make a cup of tea, and come back to a library that looks like it costs money.
 
