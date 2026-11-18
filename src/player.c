@@ -325,7 +325,7 @@ void player_open(int e, int allow_ask) {
     /* give the hardware decoder as much memory as possible */
     img_flush();
     lofi_release_all();
-    mus_pause(); /* music stops for a video */
+    mus_release_audio(); /* music stops for a video and hands over the sound channel */
     int restart = 0;
     if (av_started) {
         save_progress(1);

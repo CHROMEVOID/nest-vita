@@ -627,7 +627,7 @@ void music_scan_start(void) {
     scan_done = 0;
     M.scanning = 1;
     M.scan_found = 0;
-    scan_th = sceKernelCreateThread("nest_mscan", scan_thread, 0x10000100 + 30, 0x10000, 0, 0, NULL);
+    scan_th = sceKernelCreateThread("nest_mscan", scan_thread, 0x10000100 + 30, 0x80000, 0, 0, NULL); /* tag reading uses big buffers */
     if (scan_th < 0 || sceKernelStartThread(scan_th, 0, NULL) < 0) {
         M.scanning = 0;
         scan_th = -1;

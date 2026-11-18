@@ -30,6 +30,7 @@ static int from_kind, from_idx;
 static volatile int sleep_end_song;
 static volatile int64_t sleep_at; /* process time in us, 0 = off */
 static int screen_off;
+static volatile int release_req, port_released;
 
 static void lock(void) { if (mtx >= 0) sceKernelLockMutex(mtx, 1, NULL); }
 static void unlock(void) { if (mtx >= 0) sceKernelUnlockMutex(mtx, 1); }
@@ -80,9 +81,8 @@ static int advance(int user) {
 static int play_thread(SceSize a, void *arg) {
     (void)a;
     (void)arg;
-    int port = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_BGM, 1024, 48000, SCE_AUDIO_OUT_MODE_STEREO);
-    if (port < 0) port = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_MAIN, 1024, 48000, SCE_AUDIO_OUT_MODE_STEREO);
-    if (port < 0) return sceKernelExitDeleteThread(0);
+    /* the Vita has one music (BGM) channel: hold it only while songs play, so videos get it */
+    int port = -1;
     int port_rate = 48000, port_vol = -1, decim = 1;
     float lim_state = 1;
     SceUInt64 last_tick = 0;
@@ -105,7 +105,7 @@ static int play_thread(SceSize a, void *arg) {
                     for (int i = 0; i < 9; i++)
                         if (abs(ok_rates[i] - pr) < abs(best - pr)) best = ok_rates[i];
                     if (best != port_rate) {
-                        sceAudioOutSetConfig(port, -1, best, SCE_AUDIO_OUT_MODE_STEREO);
+                        if (port >= 0) sceAudioOutSetConfig(port, -1, best, SCE_AUDIO_OUT_MODE_STEREO);
                         port_rate = best;
                     }
                     cur_rate = r;
@@ -129,8 +129,25 @@ static int play_thread(SceSize a, void *arg) {
         }
         int go = playing && dec;
         unlock();
+        if (release_req || (!go && port >= 0 && !playing)) {
+            if (port >= 0) {
+                sceAudioOutReleasePort(port);
+                port = -1;
+            }
+            port_released = 1;
+            release_req = 0;
+        }
+        if (go && port < 0) {
+            port = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_BGM, 1024, port_rate, SCE_AUDIO_OUT_MODE_STEREO);
+            if (port < 0) { /* a video still has it */
+                sceKernelDelayThread(50000);
+                continue;
+            }
+            port_released = 0;
+            port_vol = -1;
+        }
 
-        if (port_vol != vol_hw) {
+        if (port >= 0 && port_vol != vol_hw) {
             int v[2] = {vol_hw, vol_hw};
             sceAudioOutSetVolume(port, SCE_AUDIO_VOLUME_FLAG_L_CH | SCE_AUDIO_VOLUME_FLAG_R_CH, v);
             port_vol = vol_hw;
@@ -211,7 +228,7 @@ static void ensure_thread(void) {
     if (th >= 0) return;
     mtx = sceKernelCreateMutex("nest_mus", 0, 0, NULL);
     sceAppMgrAcquireBgmPort(); /* keep playing when Nest isn't in front */
-    th = sceKernelCreateThread("nest_music", play_thread, 0x10000100 - 20, 0x8000, 0, 0, NULL);
+    th = sceKernelCreateThread("nest_music", play_thread, 0x10000100 - 20, 0x40000, 0, 0, NULL);
     if (th >= 0) sceKernelStartThread(th, 0, NULL);
     rnd_state ^= (uint32_t)sceKernelGetProcessTimeWide();
     mus_set_volume(db_geti("music_vol", 100));
@@ -263,6 +280,14 @@ void mus_play_shuffled(const int *tracks, int n, int fk, int fi, const char *fl)
 }
 
 void mus_pause(void) { playing = 0; }
+
+/* a video is starting: stop and give back the music channel straight away */
+void mus_release_audio(void) {
+    playing = 0;
+    if (th < 0) return;
+    release_req = 1;
+    for (int i = 0; i < 40 && !port_released; i++) sceKernelDelayThread(5000);
+}
 void mus_resume(void) {
     if (qn <= 0) return;
     ensure_thread();

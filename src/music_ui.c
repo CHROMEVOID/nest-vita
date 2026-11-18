@@ -723,8 +723,6 @@ void music_tab_frame(float dt, int focused, int *want_nav) {
             }
             if (in.repeat & B_DOWN && fc + cols < n_items) fc += cols, moved = 1;
             else if (in.repeat & B_DOWN && cols > 1 && fc / cols < (n_items - 1) / cols) fc = n_items - 1, moved = 1;
-            if (in.repeat & B_L && cols == 1) { fc = clampi(fc - 8, 0, n_items - 1); moved = 1; }
-            if (in.repeat & B_R && cols == 1) { fc = clampi(fc + 8, 0, n_items - 1); moved = 1; }
             if (n_items > 0 && fc < n_items) {
                 if (in.pressed & B_OK) {
                     if (mv == MV_SONGS) mus_play(slist, sn, fc, FROM_SONGS, -1, "Your songs");
@@ -1411,12 +1409,22 @@ void nowplaying_frame(float dt) {
    ================================================================ */
 
 static float mini_a;
+static int mini_shows_on(int top);
 
 int miniplayer_height(void) { return mus_active() ? 70 : 0; }
 
+static int mini_shows_on(int top) {
+    return top == SCR_MAIN || top == SCR_DETAIL || top == SCR_MPAGE || top == SCR_SEARCH || top == SCR_HISTORY ||
+           top == SCR_STATS || top == SCR_STORAGE;
+}
+int miniplayer_owns_tap(int top) {
+    if (!mus_active() || !mini_shows_on(top) || mini_a < 0.5f || modal_active()) return 0;
+    float y = SCR_H - 66;
+    return (in.tap && in.tap_y >= y) || (in.long_press && in.ty >= y) || (in.double_tap && in.tap_y >= y);
+}
+
 void miniplayer_draw(float dt, int top) {
-    int show = mus_active() && (top == SCR_MAIN || top == SCR_DETAIL || top == SCR_MPAGE || top == SCR_SEARCH || top == SCR_HISTORY ||
-                                top == SCR_STATS || top == SCR_STORAGE);
+    int show = mus_active() && mini_shows_on(top);
     mini_a = approach(mini_a, show ? 1 : 0, 12, dt);
     if (mini_a < 0.01f) return;
     int ti = mus_current();

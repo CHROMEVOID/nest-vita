@@ -83,6 +83,7 @@ void mus_play(const int *tracks, int n, int start, int from_kind, int from_idx, 
 void mus_play_shuffled(const int *tracks, int n, int from_kind, int from_idx, const char *from_label);
 void mus_toggle(void);
 void mus_pause(void);
+void mus_release_audio(void); /* before a video opens its sound */
 void mus_resume(void);
 void mus_next(void);
 void mus_prev(void);
@@ -123,6 +124,7 @@ void nowplaying_open(void);
 void nowplaying_frame(float dt);
 void miniplayer_draw(float dt, int top_screen); /* small bar over the menus */
 int miniplayer_height(void);
+int miniplayer_owns_tap(int top_screen); /* the tap landed on the player bar */
 void music_track_menu(int ti, int pl_i, int pl_pos);
 void art_draw(const char *art, const char *seed, float x, float y, float w, float h, float r, float a);
 #endif

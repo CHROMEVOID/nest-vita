@@ -341,6 +341,9 @@ int main(void) {
             in.ddx = in.ddy = 0;
             in.dragging = 0;
         }
+        if (miniplayer_owns_tap(nav_top())) { /* taps on the music bar are for the bar only */
+            in.tap = in.long_press = in.double_tap = 0;
+        }
         frame_for(nav_top(), dt);
         in = saved;
         if (pending >= 0) {
