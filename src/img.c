@@ -339,7 +339,7 @@ static int worker(SceSize args, void *argp) {
 void img_init(void) {
     mtx = sceKernelCreateMutex("nest_img", 0, 0, NULL);
     sema = sceKernelCreateSema("nest_img_s", 0, 0, 64, NULL);
-    SceUID th = sceKernelCreateThread("nest_img", worker, 0x10000110, 512 * 1024, 0, 0, NULL);
+    SceUID th = sceKernelCreateThread("nest_img", worker, 0x10000110, 512 * 1024, 0, 0x20000 /* core 1: never slows the screen */, NULL);
     if (th >= 0) sceKernelStartThread(th, 0, NULL);
 }
 

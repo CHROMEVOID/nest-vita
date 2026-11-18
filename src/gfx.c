@@ -784,28 +784,118 @@ void icon(int id, float cx, float cy, float s, col_t c) {
 #undef L
 }
 
-/* ---------- glass ---------- */
+/* ---------- glass ----------
+   Liquid glass, warm lofi style: each panel shows a blurred copy of exactly
+   what's behind it (the scene, the cover, the hero picture), a soft warm
+   frost, and a thin edge that catches the light at the top-left and
+   bottom-right like real glass. No stripes, no hard borders. */
+
+typedef struct {
+    vita2d_texture *tex;
+    float x, y, w, h, ax, ay;
+    col_t veil;
+} GlassBg;
+static GlassBg gbg[6];
+static int ngbg;
+
+void glass_reset(void) { ngbg = 0; }
+
+void glass_backdrop(vita2d_texture *tex, float x, float y, float w, float h, float ax, float ay, col_t veil) {
+    if (w <= 0 || h <= 0) return;
+    if (ngbg == 6) {
+        memmove(gbg, gbg + 1, sizeof(GlassBg) * 5);
+        ngbg = 5;
+    }
+    gbg[ngbg++] = (GlassBg){tex, x, y, w, h, ax, ay, veil};
+}
+
+/* the backdrop under a point: the latest one drawn there */
+static GlassBg *glass_under(float px, float py) {
+    for (int i = ngbg - 1; i >= 0; i--) {
+        GlassBg *b = &gbg[i];
+        if (px >= b->x && px <= b->x + b->w && py >= b->y && py <= b->y + b->h) return b;
+    }
+    return NULL;
+}
+
+/* draw the part of a "cover"-mapped backdrop that sits under a rounded rect */
+static void tex_mapped(GlassBg *b, float x, float y, float w, float h, float r, col_t tint) {
+    vita2d_texture *tex = b->tex;
+    float tw = vita2d_texture_get_width(tex), th = vita2d_texture_get_height(tex);
+    float s = fmaxf(b->w / tw, b->h / th);
+    float vw = b->w / s, vh = b->h / s;
+    float u0 = (tw - vw) * clampf(b->ax, 0, 1), v0 = (th - vh) * clampf(b->ay, 0, 1);
+    float px[MAXP], py[MAXP];
+    int n = rr_points(x, y, w, h, r, px, py);
+    vita2d_texture_vertex *v =
+        vita2d_pool_memalign((n + 2) * sizeof(vita2d_texture_vertex), sizeof(vita2d_texture_vertex));
+    if (!v) return;
+#define MAPU(X) ((u0 + ((X) - b->x) / b->w * vw) / tw)
+#define MAPV(Y) ((v0 + ((Y) - b->y) / b->h * vh) / th)
+    v[0] = (vita2d_texture_vertex){x + w / 2, y + h / 2, 0.5f, MAPU(x + w / 2), MAPV(y + h / 2)};
+    for (int i = 0; i <= n; i++) {
+        int k = i % n;
+        v[i + 1] = (vita2d_texture_vertex){px[k], py[k], 0.5f, MAPU(px[k]), MAPV(py[k])};
+    }
+#undef MAPU
+#undef MAPV
+    vita2d_draw_array_textured(tex, SCE_GXM_PRIMITIVE_TRIANGLE_FAN, v, n + 2, tint);
+}
+
+/* a ring just inside the edge; brightness follows how the edge faces the light */
+static void glass_ring(float x, float y, float w, float h, float r, float t, float a_edge, float a_inner, float lit, int light) {
+    float px[MAXP], py[MAXP];
+    int n = rr_points(x, y, w, h, r, px, py);
+    if (n < 3) return;
+    vita2d_color_vertex *v = cverts(2 * (n + 1));
+    if (!v) return;
+    float rc = fminf(r, fminf(w, h) / 2);
+    float cx0 = x + rc, cx1 = x + w - rc, cy0 = y + rc, cy1 = y + h - rc;
+    for (int i = 0; i <= n; i++) {
+        int k = i % n;
+        float nx = px[k] - clampf(px[k], cx0, cx1), ny = py[k] - clampf(py[k], cy0, cy1);
+        float len = sqrtf(nx * nx + ny * ny);
+        if (len < 0.001f) { nx = 0; ny = -1; }
+        else { nx /= len; ny /= len; }
+        /* light from the top-left: that corner glows, and so does the opposite one, softer */
+        float d = -(nx + ny) * 0.7071f;
+        float f = d > 0 ? d * d * d : (-d) * (-d) * (-d) * 0.55f;
+        float k2 = (1 - lit) + lit * f;
+        col_t base = light ? 0xFFFFFFFF : 0xFFFFF4E6; /* warm white */
+        v[i * 2] = (vita2d_color_vertex){px[k], py[k], 0.5f, col_a(base, a_edge * k2)};
+        v[i * 2 + 1] = (vita2d_color_vertex){px[k] - nx * t, py[k] - ny * t, 0.5f, col_a(base, a_inner * k2)};
+    }
+    vita2d_draw_array(SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, v, 2 * (n + 1));
+}
 
 void gfx_glass_tint(float x, float y, float w, float h, float r, float a, col_t tint) {
-    if (a <= 0.01f) return;
+    if (a <= 0.01f || w <= 2 || h <= 2) return;
     if (!S.glass) { /* plain, solid panels */
         gfx_shadow(x, y + 6, w, h, r, 16, col_a(T->shadow, 0.8f * a));
         gfx_rrect(x, y, w, h, r, col_a(col_mix(T->surface, T->surface2, 0.5f), 0.97f * a));
         return;
     }
     int light = T->light;
-    gfx_shadow(x, y + 8, w, h, r, 22, col_a(0xFF000000, (light ? 0.14f : 0.32f) * a));
-    /* the frosted body: lets the scene behind show through, tinted by the theme */
-    col_t body = light ? col_a(0xFFFFFFFF, 0.62f * a) : col_a(col_mix(tint, 0xFF000000, 0.35f), 0.58f * a);
-    gfx_rrect(x, y, w, h, r, body);
-    /* gloss: bright at the top, fading down */
-    gfx_rrect_grad(x, y, w, h, r, col_a(0xFFFFFFFF, (light ? 0.30f : 0.13f) * a), col_a(0xFFFFFFFF, 0.0f));
-    /* a second, tighter shine along the top edge */
-    float sh = h < 60 ? h * 0.45f : 26;
-    gfx_rrect_grad(x + 1, y + 1, w - 2, sh, r, col_a(0xFFFFFFFF, (light ? 0.35f : 0.10f) * a), col_a(0xFFFFFFFF, 0));
-    /* rim light and a crisp top highlight */
-    gfx_rrect_outline(x, y, w, h, r, 1, col_a(0xFFFFFFFF, (light ? 0.55f : 0.14f) * a));
-    if (w > r * 2 + 4) gfx_rect(x + r, y + 0.5f, w - r * 2, 1, col_a(0xFFFFFFFF, (light ? 0.8f : 0.30f) * a));
+    /* a soft lift off the page */
+    gfx_shadow(x, y + 8, w, h, r, 26, col_a(0xFF000000, (light ? 0.10f : 0.26f) * a));
+    /* what's behind, blurred */
+    GlassBg *b = glass_under(x + w / 2, y + h / 2);
+    if (b && !b->tex) b = NULL; /* over a sharp picture: just frost */
+    if (b) {
+        tex_mapped(b, x, y, w, h, r, col_a(0xFFFFFFFF, a));
+        /* the same veil the page has, but thinner: glass reads lighter and clearer than the page */
+        gfx_rrect(x, y, w, h, r, col_a(b->veil | 0xFF000000u, ((b->veil >> 24) / 255.0f) * 0.55f * a));
+    }
+    /* warm frost */
+    col_t cream = HEX(0xF3E3CC);
+    col_t frost = light ? col_a(0xFFFFFFFF, (b ? 0.38f : 0.7f) * a) : col_a(col_mix(tint, cream, 0.16f), (b ? 0.30f : 0.62f) * a);
+    gfx_rrect(x, y, w, h, r, frost);
+    /* light gathers a little at the top, very gently */
+    gfx_rrect_grad(x, y, w, h, r, col_a(0xFFFFFFFF, (light ? 0.16f : 0.06f) * a), col_a(0xFFFFFFFF, 0));
+    /* the liquid edge: a soft inner glow, then a crisp rim that catches the light */
+    float glow = fminf(10, fminf(w, h) * 0.25f);
+    glass_ring(x, y, w, h, r, glow, (light ? 0.30f : 0.10f) * a, 0, 0.6f, light);
+    glass_ring(x, y, w, h, r, 1.3f, (light ? 0.9f : 0.55f) * a, (light ? 0.5f : 0.25f) * a, 0.85f, light);
 }
 
 void gfx_glass(float x, float y, float w, float h, float r, float a) { gfx_glass_tint(x, y, w, h, r, a, T->surface2); }

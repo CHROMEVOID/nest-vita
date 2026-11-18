@@ -428,7 +428,7 @@ static int roots_ok[24], roots_songs[24], roots_picked[24];
 static int rescan_after; /* a scan was asked for while one was running */
 static int last_nroots;
 static int nroots;
-static volatile int scan_done;
+static volatile int scan_done, scan_cancel;
 static SceUID scan_th = -1;
 /* what's already known: path + size, so unchanged files aren't opened again */
 static char **known_path;
@@ -511,7 +511,7 @@ static void found_add(const char *path, long long size, const char *folder_art, 
 }
 
 static void walk(const char *dir, int depth) {
-    if (depth > 8) return;
+    if (depth > 8 || scan_cancel) return;
     DirList *d = calloc(1, sizeof(DirList));
     if (!d) return;
     if (fs_list(dir, list_cb, d) < 0) { dl_free(d); return; }
@@ -590,7 +590,7 @@ static int scan_thread(SceSize a, void *p) {
             if (dd >= 0) { roots_ok[i] = 1; sceIoDclose(dd); }
         }
         int before = nfound;
-        if (roots_ok[i]) walk(roots[i], 0);
+        if (roots_ok[i] && !scan_cancel) walk(roots[i], 0);
         roots_songs[i] = nfound - before;
     }
     scan_done = 1;
@@ -614,7 +614,11 @@ static void add_root_ex(const char *r, int picked) {
 static void add_root(const char *r) { add_root_ex(r, 0); }
 
 void music_scan_start(void) {
-    if (M.scanning) { rescan_after = 1; return; }
+    if (M.scanning) { /* a new folder was picked: stop the old search and start on it now */
+        scan_cancel = 1;
+        rescan_after = 1;
+        return;
+    }
     sceIoMkdir(MUSIC_DIR, 0777);
     sceIoMkdir(ART_DIR, 0777);
     sceIoMkdir("ux0:music", 0777); /* so there's always an obvious place to put songs */
@@ -663,9 +667,10 @@ void music_scan_start(void) {
     nplists = 0;
     nartimg = 0;
     scan_done = 0;
+    scan_cancel = 0;
     M.scanning = 1;
     M.scan_found = 0;
-    scan_th = sceKernelCreateThread("nest_mscan", scan_thread, 0x10000100 + 30, 0x80000, 0, 0, NULL); /* tag reading uses big buffers */
+    scan_th = sceKernelCreateThread("nest_mscan", scan_thread, 0x10000100 + 30, 0x80000, 0, 0x40000, NULL); /* tag reading uses big buffers */
     if (scan_th < 0 || sceKernelStartThread(scan_th, 0, NULL) < 0) {
         M.scanning = 0;
         scan_th = -1;
@@ -907,7 +912,11 @@ void music_frame(float dt) {
         }
         int before = M.nt;
         last_nroots = nroots;
-        scan_commit();
+        if (scan_cancel) { /* stopped half way: keep everything as it was */
+            for (int i = 0; i < nfound; i++) free(found[i].path);
+            nfound = 0;
+        } else
+            scan_commit();
         M.scanning = 0;
         if (rescan_after) {
             rescan_after = 0;

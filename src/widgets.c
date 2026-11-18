@@ -24,6 +24,7 @@ void draw_scene_bg(float strength) {
     lofi_draw(l, 0, 0, SCR_W, SCR_H, 0, 0xFFFFFFFF, 0.5f, 0.5f);
     float veil = S.bg_level == 1 ? 0.80f : 0.58f;
     veil = 1.0f - (1.0f - veil) * clampf(strength, 0, 1.5f);
+    glass_backdrop(lofi_soft(bg_scene_id()), 0, 0, SCR_W, SCR_H, 0.5f, 0.5f, col_a(T->bg, clampf(veil, 0, 1)));
     gfx_rect(0, 0, SCR_W, SCR_H, col_a(T->bg, clampf(veil, 0, 1)));
     gfx_grad_v(0, SCR_H - 140, SCR_W, 140, col_a(T->bg, 0), col_a(T->bg, 0.5f));
 }

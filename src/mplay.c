@@ -317,9 +317,9 @@ static void ensure_thread(void) {
     if (th >= 0) return;
     mtx = sceKernelCreateMutex("nest_mus", 0, 0, NULL);
     sceAppMgrAcquireBgmPort(); /* keep playing when Nest isn't in front */
-    th_dec = sceKernelCreateThread("nest_mdec", decode_thread, 0x10000100 - 10, 0x40000, 0, 0, NULL);
+    th_dec = sceKernelCreateThread("nest_mdec", decode_thread, 0x10000100 - 10, 0x40000, 0, 0x40000, NULL);
     if (th_dec >= 0) sceKernelStartThread(th_dec, 0, NULL);
-    th = sceKernelCreateThread("nest_music", play_thread, 0x10000100 - 20, 0x10000, 0, 0, NULL);
+    th = sceKernelCreateThread("nest_music", play_thread, 0x10000100 - 20, 0x10000, 0, 0x40000, NULL);
     if (th >= 0) sceKernelStartThread(th, 0, NULL);
     rnd_state ^= (uint32_t)sceKernelGetProcessTimeWide();
     mus_set_volume(db_geti("music_vol", 100));
@@ -512,6 +512,7 @@ void mus_set_volume(int pct) {
        reaches x3.6: the hardware does what it can, software does the rest, and
        the limiter keeps it clean */
     float eff = vol_pct * 1.2f / 100.0f;
+    if (vol_pct > 150) eff = 1.8f * powf(vol_pct / 150.0f, 1.75f); /* past 150% it climbs fast: 300% is about x6 */
     if (eff <= 1.0f) {
         vol_hw = (int)(32768 * eff);
         vol_gain = 256;

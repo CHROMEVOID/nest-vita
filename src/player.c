@@ -435,6 +435,7 @@ static void set_volume(int pct) {
        reaches x3.6: the hardware does what it can, software does the rest, and
        the limiter keeps it clean */
     float eff = vol_pct * 1.2f / 100.0f;
+    if (vol_pct > 150) eff = 1.8f * powf(vol_pct / 150.0f, 1.75f); /* past 150% it climbs fast: 300% is about x6 */
     if (eff <= 1.0f) {
         audio_vol = (int)(32768 * eff);
         audio_gain = 256;

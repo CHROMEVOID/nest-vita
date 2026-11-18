@@ -319,7 +319,7 @@ static void draw_hero_art(Title *t, float y0, float alpha) {
         tex = img_get(t->poster, SCR_W, (int)HERO_H, &fade);
         ay = 0.18f;
     }
-    if (!tex || fade < 1) {
+    if ((!tex || fade < 1) && alpha >= 0.999f) { /* only under a hero that's fully in: no flash while switching */
         Lofi *l = S.show_lofi ? lofi_get(T->scene) : NULL;
         if (l) lofi_draw(l, 0, y0, SCR_W, HERO_H + 40, 0, col_a(0xFFFFFFFF, alpha * T->scene_alpha * 1.4f), 0.5f, 0.6f);
         else gfx_grad_v(0, y0, SCR_W, HERO_H, col_a(T->surface2, alpha), col_a(T->bg, alpha));
@@ -328,6 +328,8 @@ static void draw_hero_art(Title *t, float y0, float alpha) {
         /* very slow drift keeps the hero alive without distracting */
         float drift = 0; /* the old slow pan moved the picture by fractions of a pixel: it shimmered */
         gfx_tex(tex, 0, y0, SCR_W, HERO_H + 40, 0, col_a(0xFFFFFFFF, alpha * ease_out(fade)), 0.5f + drift, ay);
+        /* glass over the picture: frosted, with no second copy to load */
+        glass_backdrop(NULL, 0, y0, SCR_W, HERO_H + 40, 0.5f, ay, col_a(T->bg, 0.35f));
     }
 }
 
@@ -355,9 +357,18 @@ static void draw_hero(float y0, float dt, int focused) {
     if (S.hero_rotate && nhero > 1 && !S.reduce_motion) {
         idle = in.any ? 0 : idle + dt;
         hero_timer += dt;
-        if (hero_timer > 10 && (idle > 4 || !focused)) {
+        int nx = (hero_i + 1) % nhero;
+        Title *tn = &L.t[hero[nx]];
+        const char *nsrc = tn->backdrop ? tn->backdrop : tn->poster;
+        int next_ready = 1;
+        if (hero_timer > 6 && nsrc) { /* start loading the next picture (and logo) a few seconds early */
+            float f2 = 0;
+            next_ready = img_get(nsrc, SCR_W, (int)HERO_H, &f2) != NULL;
+            if (tn->logo) next_ready &= img_get(tn->logo, 380, 120, &f2) != NULL;
+        }
+        if (hero_timer > 10 && (idle > 4 || !focused) && next_ready && hero_fade >= 1) {
             hero_prev = hero_i;
-            hero_i = (hero_i + 1) % nhero;
+            hero_i = nx;
             hero_timer = 0;
             hero_fade = 0;
         }

@@ -48,6 +48,7 @@ static void art_blur(const char *art, float x, float y, float w, float h, float 
     float fade = 0;
     vita2d_texture *tex = art && art[0] ? img_get(art, 20, 20, &fade) : NULL;
     if (tex) gfx_tex(tex, x, y, w, h, 0, col_a(0xFFFFFFFF, a * fade), 0.5f, 0.5f);
+    if (tex && fade >= 1 && a > 0.3f && w >= SCR_W) glass_backdrop(tex, x, y, w, h, 0.5f, 0.5f, col_a(0xFF000000, 0.5f));
 }
 
 static void liked_cover(float x, float y, float s, float r, float a) {
@@ -1361,7 +1362,7 @@ static void lyrics_tick(int ti) {
         lyr_n = 0;
         snprintf(lyr_path, sizeof(lyr_path), "%s", M.t[ti].path);
         lyr_loading = 1;
-        SceUID th = sceKernelCreateThread("nest_lyrics", lyr_thread, 0x10000100 + 20, 0x40000, 0, 0, NULL);
+        SceUID th = sceKernelCreateThread("nest_lyrics", lyr_thread, 0x10000100 + 20, 0x40000, 0, 0x20000, NULL);
         if (th < 0 || sceKernelStartThread(th, 0, NULL) < 0) lyr_loading = 0;
     }
 }

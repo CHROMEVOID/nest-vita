@@ -335,6 +335,7 @@ int main(void) {
         vita2d_start_drawing();
         vita2d_clear_screen();
 
+        glass_reset();
         Input saved = in;
         int frozen = modal_active() || pending >= 0 || apply_now;
         if (frozen) {

@@ -498,7 +498,7 @@ void metafind_start(int tid) {
     job = j;
     done = 0;
     running = 1;
-    SceUID th = sceKernelCreateThread("nest_metafind", worker, 0x10000110, 256 * 1024, 0, 0, NULL);
+    SceUID th = sceKernelCreateThread("nest_metafind", worker, 0x10000110, 256 * 1024, 0, 0x40000, NULL);
     if (th < 0 || sceKernelStartThread(th, 0, NULL) < 0) {
         running = 0;
         toast("Couldn't start looking");

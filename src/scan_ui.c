@@ -79,7 +79,7 @@ void scan_open(int p) {
     focus = 0;
     ask_another = 0;
     if (p == SCAN_RESCAN) nfold = db_folders(folder_list, f_secret, f_mode, 24);
-    SceUID th = sceKernelCreateThread("nest_scan", worker, 0x10000110, 256 * 1024, 0, 0, NULL);
+    SceUID th = sceKernelCreateThread("nest_scan", worker, 0x10000110, 256 * 1024, 0, 0x40000, NULL);
     if (th < 0 || sceKernelStartThread(th, 0, NULL) < 0) do_scan(); /* fall back to scanning inline */
     if (nav_top() == SCR_PICKER) nav_replace(SCR_SCAN);
     else nav_push(SCR_SCAN);

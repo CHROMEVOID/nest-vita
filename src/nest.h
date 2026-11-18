@@ -66,6 +66,9 @@ void gfx_tex_fit(vita2d_texture *tex, float x, float y, float w, float h, col_t 
 void gfx_clip(float x, float y, float w, float h);
 /* frosted glass: see-through tinted panel, glossy sheen, light rim, soft shadow (a = opacity) */
 void gfx_glass(float x, float y, float w, float h, float r, float a);
+void glass_reset(void); /* each frame */
+/* tell the glass what's drawn behind: a (blurry) texture shown "cover" over a rect, and the veil on top of it */
+void glass_backdrop(vita2d_texture *tex, float x, float y, float w, float h, float ax, float ay, col_t veil);
 void gfx_glass_tint(float x, float y, float w, float h, float r, float a, col_t tint);
 void gfx_noclip(void);
 
