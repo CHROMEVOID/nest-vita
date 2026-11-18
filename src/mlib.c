@@ -449,20 +449,39 @@ typedef struct {
     int depth;
 } WalkCtx;
 
+/* a folder's files: no limit (some people keep thousands of songs in one folder) */
 typedef struct {
-    char names[256][256];
-    int dir[256];
-    long long size[256];
-    int n;
+    char (*names)[256];
+    int *dir;
+    long long *size;
+    int n, cap;
 } DirList;
 
 static void list_cb(void *ud, const char *name, int is_dir, long long size) {
     DirList *d = ud;
-    if (d->n >= 256) return;
+    if (d->n == d->cap) {
+        int nc = d->cap ? d->cap * 2 : 256;
+        void *a = realloc(d->names, sizeof(*d->names) * nc);
+        if (!a) return;
+        d->names = a;
+        a = realloc(d->dir, sizeof(int) * nc);
+        if (!a) return;
+        d->dir = a;
+        a = realloc(d->size, sizeof(long long) * nc);
+        if (!a) return;
+        d->size = a;
+        d->cap = nc;
+    }
     snprintf(d->names[d->n], 256, "%s", name);
     d->dir[d->n] = is_dir;
     d->size[d->n] = size;
     d->n++;
+}
+static void dl_free(DirList *d) {
+    free(d->names);
+    free(d->dir);
+    free(d->size);
+    free(d);
 }
 
 static const char *COVER_NAMES[] = {"cover", "folder", "front", "album", "albumart", "albumartlarge", "thumb", NULL};
@@ -490,10 +509,9 @@ static void found_add(const char *path, long long size, const char *folder_art, 
 
 static void walk(const char *dir, int depth) {
     if (depth > 8) return;
-    DirList *d = malloc(sizeof(DirList));
+    DirList *d = calloc(1, sizeof(DirList));
     if (!d) return;
-    d->n = 0;
-    if (fs_list(dir, list_cb, d) < 0) { free(d); return; }
+    if (fs_list(dir, list_cb, d) < 0) { dl_free(d); return; }
     snprintf(M.scan_now, sizeof(M.scan_now), "%s", dir);
     /* cover image in this folder */
     char cover[512] = "";
@@ -546,7 +564,7 @@ static void walk(const char *dir, int depth) {
         if (!strncasecmp(sub, DATA_DIR, strlen(DATA_DIR)) && strncasecmp(sub, MUSIC_DIR, strlen(MUSIC_DIR))) continue;
         walk(sub, depth + 1);
     }
-    free(d);
+    dl_free(d);
 }
 
 static int scan_thread(SceSize a, void *p) {
@@ -896,6 +914,7 @@ void music_frame(float dt) {
 
 void music_init(void) {
     schema();
+    eq_load();
     sceIoMkdir(MUSIC_DIR, 0777);
     sceIoMkdir(ART_DIR, 0777);
     music_reload();

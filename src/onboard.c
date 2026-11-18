@@ -1,10 +1,11 @@
 /* First launch: welcome, PIN, folders (looping), a short setup and a soft
    "your library is ready" moment. Everything works offline. */
 #include "nest.h"
+#include "music.h"
 
 extern int g_onboard_pin_done, g_onboard_folders_done;
 
-enum { OB_WELCOME, OB_PIN, OB_FOLDERS, OB_SETUP, OB_READY };
+enum { OB_WELCOME, OB_PIN, OB_FOLDERS, OB_MUSIC, OB_SETUP, OB_READY };
 static int step;
 static float t, step_t;
 static int focus, setup_row;
@@ -63,7 +64,7 @@ void onboard_frame(float dt) {
         float ta = clampf((t - 0.7f) / 1.2f, 0, 1);
         float y = 300 + (1 - ease_out(ta)) * 16;
         text_center(F_DISPLAY, T->display_font == 2 ? 50 : 64, SCR_W / 2, y, col_a(T->text, ta), "nest");
-        text_center(F_REG, 16, SCR_W / 2, y + 36, col_a(T->text2, ta), "A calm home for your films, shows and books.");
+        text_center(F_REG, 16, SCR_W / 2, y + 36, col_a(T->text2, ta), "A calm home for your films, shows, music and books.");
         float ba = clampf((t - 1.6f) / 0.8f, 0, 1);
         if (ba > 0) {
             draw_button(SCR_W / 2 - 80, y + 70, 160, 46, IC_CHEVRON_R, "Begin", 1, ba);
@@ -73,7 +74,7 @@ void onboard_frame(float dt) {
     }
     draw_backdrop_scene(0.1f);
     /* step dots */
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         float on = i == step - 1;
         gfx_rrect(72 + i * 22, 92, on ? 16 : 8, 4, 2, on ? T->accent : col_a(T->text, 0.2f));
     }
@@ -97,7 +98,7 @@ void onboard_frame(float dt) {
         scene_window("study", a);
         if (g_onboard_folders_done) {
             g_onboard_folders_done = 0;
-            go(OB_SETUP);
+            go(OB_MUSIC);
             return;
         }
         words("YOUR SHELVES", "Where do your stories live?",
@@ -105,6 +106,33 @@ void onboard_frame(float dt) {
               a);
         int c = two_buttons("Pick a folder", IC_FOLDER, "Skip", -1, 420);
         if (c == 0) picker_open(PICK_ONBOARD);
+        else if (c == 1) go(OB_MUSIC);
+        return;
+    }
+    if (step == OB_MUSIC) {
+        scene_window("rooftop", a);
+        /* a little now-playing card floating over the scene */
+        {
+            float cx = 580, cy = 330, cw = 280, chh = 76;
+            gfx_shadow(cx, cy + 8, cw, chh, 16, 24, col_a(0xFF000000, 0.5f * a));
+            gfx_rrect(cx, cy, cw, chh, 16, col_a(col_mix(T->bg, 0xFF000000, 0.3f), 0.95f * a));
+            gfx_rrect_grad(cx + 12, cy + 12, 52, 52, 10, col_a(T->accent, a), col_a(col_mix(T->accent, 0xFF000000, 0.5f), a));
+            icon(IC_NOTE, cx + 38, cy + 38, 26, col_a(0xFFFFFFFF, a));
+            text(F_SEMI, 15, cx + 78, cy + 32, col_a(T->text, a), "Your music");
+            text(F_REG, 12, cx + 78, cy + 52, col_a(T->text3, a), "albums \xc2\xb7 artists \xc2\xb7 playlists");
+            for (int b = 0; b < 5; b++) {
+                float k = 0.3f + 0.7f * fabsf(sinf(t * (4.0f + b) + b));
+                float h = 18 * k;
+                gfx_rrect(cx + cw - 54 + b * 7, cy + 48 - h, 4, h, 2, col_a(T->accent, a));
+            }
+        }
+        words("AND YOUR MUSIC", "Music lives here too",
+              "Put songs in ux0:music (or any folder you add) and Nest sorts them into albums and artists, even badly named ones. "
+              "Make playlists, shuffle, use the queue, and turn the screen off while it plays. The Nest Music PC app brings your Spotify playlists over.",
+              a);
+        int c = two_buttons("Find my music", IC_NOTE, "Continue", -1, 420);
+        if (c >= 0) db_seti("seen_music_intro", 1);
+        if (c == 0) { music_scan_start(); toast("Looking for your music in the background"); go(OB_SETUP); }
         else if (c == 1) go(OB_SETUP);
         return;
     }
@@ -162,7 +190,7 @@ void onboard_frame(float dt) {
         text_center(F_DISPLAY, T->display_font == 2 ? 30 : 40, SCR_W / 2, 300 + (1 - ease_out(a)) * 12, col_a(T->text, a),
                     "Your library is ready");
         char sub[160];
-        if (L.nt) snprintf(sub, sizeof(sub), "%d films  \xc2\xb7  %d shows  \xc2\xb7  %d books", L.nmovies, L.nshows, L.nbooks);
+        if (L.nt || M.nt) snprintf(sub, sizeof(sub), "%d films  \xc2\xb7  %d shows  \xc2\xb7  %d books  \xc2\xb7  %d songs", L.nmovies, L.nshows, L.nbooks, M.nt);
         else snprintf(sub, sizeof(sub), "Add folders any time from Settings \xe2\x80\xba Library.");
         text_center(F_REG, 15, SCR_W / 2, 334, col_a(T->text2, a), sub);
         if (step_t > 2.6f || ((in.pressed & B_OK) && step_t > 0.6f) || (in.tap && step_t > 0.6f)) {

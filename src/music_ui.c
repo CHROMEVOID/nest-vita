@@ -779,14 +779,14 @@ void music_tab_frame(float dt, int focused, int *want_nav) {
     fsel = approach(fsel, (float)fc, 18, dt);
 
     /* ---------- content ---------- */
-    gfx_clip(0, top - 26, SCR_W, SCR_H - top + 26);
+    gfx_clip(0, top - 16, SCR_W, SCR_H - top + 16);
     int cf = focused && fr != -1;
     if (mv == MV_HOME) draw_home_rows(dt, cf, top);
     else if (mv == MV_SONGS) draw_songs(cf, top);
     else if (mv == MV_SEARCH) draw_search(focused, top);
     else draw_grid(cf, top);
     gfx_noclip();
-    gfx_grad_v(0, top - 26, SCR_W, 22, T->bg, col_a(T->bg, 0));
+    gfx_grad_v(0, top - 16, SCR_W, 16, T->bg, col_a(T->bg, 0));
 }
 
 /* ================================================================
@@ -932,7 +932,7 @@ void mpage_frame(float dt) {
 
     /* ---------- input ---------- */
     int bottom_pad = miniplayer_height();
-    float head_h = 250, strip_h = strip ? CARD + 96 : 0;
+    float head_h = 296, strip_h = strip ? CARD + 96 : 0;
     float list_top = head_h + strip_h;
     int moved = 0;
     if (in.pressed & B_BACK) { sfx(2); nav_pop(); return; }
@@ -985,8 +985,8 @@ void mpage_frame(float dt) {
     if (!in.touching) psy = approach(psy, psy_t, 11, dt);
 
     /* ---------- header ---------- */
-    float y0 = 70 - psy;
-    float as = 160;
+    float y0 = 64 - psy;
+    float as = 150;
     if (is_artist) art_draw(art, seed, MG, y0, as, as, as / 2, 1);
     else if (pk == FROM_PLAYLIST || pk == FROM_LIKED) playlist_cover(&M.p[pidx], MG, y0, as, T->radius_sm, 1);
     else {
@@ -994,16 +994,16 @@ void mpage_frame(float dt) {
         art_draw(art, seed, MG, y0, as, as, T->radius_sm, 1);
     }
     float tx = MG + as + 28;
-    text(F_META, 11, tx, y0 + 40, T->text3, plabel);
+    text(F_META, 11, tx, y0 + 24, T->text3, plabel);
     int fs = T->display_font == 2 ? 26 : 34;
     if (text_w(F_DISPLAY, fs, ptitle) > SCR_W - tx - MG) fs = fs * 3 / 4;
-    text_ellipsis(F_DISPLAY, fs, tx, y0 + 40 + fs + 4, SCR_W - tx - MG, T->text, ptitle);
-    text_ellipsis(F_REG, 14, tx, y0 + 40 + fs + 30, SCR_W - tx - MG, T->text2, psub);
+    text_ellipsis(F_DISPLAY, fs, tx, y0 + 24 + fs + 10, SCR_W - tx - MG, T->text, ptitle);
+    text_ellipsis(F_REG, 14, tx, y0 + 24 + fs + 36, SCR_W - tx - MG, T->text2, psub);
     if (pk == FROM_PLAYLIST && M.p[pidx].desc && M.p[pidx].desc[0])
-        text_ellipsis(F_REG, 13, tx, y0 + 40 + fs + 50, SCR_W - tx - MG, T->text3, M.p[pidx].desc);
+        text_ellipsis(F_REG, 13, tx, y0 + 24 + fs + 58, SCR_W - tx - MG, T->text3, M.p[pidx].desc);
     /* buttons */
-    float by = y0 + as - 40;
-    float bxs[3] = {tx, tx + 132, tx + 132 + 132};
+    float by = y0 + as + 20; /* under the cover, never over the text */
+    float bxs[3] = {MG, MG + 132, MG + 264};
     draw_button(bxs[0], by, 120, 40, IC_PLAY, "Play", 1, pf == 0 && pbtn == 0 ? 1 : 0);
     draw_button(bxs[1], by, 120, 40, IC_SHUFFLE, "Shuffle", 0, pf == 0 && pbtn == 1 ? 1 : 0);
     draw_button(bxs[2], by, 44, 40, IC_DOTS, "", 0, pf == 0 && pbtn == 2 ? 1 : 0);
@@ -1079,7 +1079,114 @@ static int qf;          /* queue focus */
 static float qsy, qsy_t, qa;
 static int seek_drag, vol_drag;
 static float seek_drag_p;
-static int qbuf[4096];
+static int qbuf[8192];
+static int eq_open, eq_f, eq_band_i, eq_drag = -1;
+static float eq_a, eq_psx, eq_psx_t;
+
+/* ---------------- equaliser ---------------- */
+
+static void eq_changed(void) { eq_save(); }
+
+static void draw_eq(float dt, float a) {
+    float w = 860, h = 430, x = (SCR_W - w) / 2, y = (SCR_H - h) / 2 + (1 - a) * 20;
+    gfx_shadow(x, y + 10, w, h, T->radius, 40, col_a(0xFF000000, 0.6f * a));
+    gfx_rrect(x, y, w, h, T->radius, col_a(col_mix(T->bg, 0xFF000000, 0.3f), 0.98f * a));
+    gfx_rrect_outline(x, y, w, h, T->radius, 1, col_a(0xFFFFFFFF, 0.08f * a));
+    text(F_BOLD, 21, x + 28, y + 42, col_a(T->text, a), "Sound");
+    int on = eq_enabled(), loud = eq_loud();
+    /* switches */
+    {
+        float sx2 = x + w - 28;
+        const char *l2 = loud ? "Loud mode: on" : "Loud mode: off";
+        const char *l1 = on ? "Equaliser: on" : "Equaliser: off";
+        float w2 = text_w(F_SEMI, 13, l2) + 28, w1 = text_w(F_SEMI, 13, l1) + 28;
+        float x2 = sx2 - w2, x1 = x2 - 10 - w1, cy0 = y + 20;
+        draw_chip(x1, cy0, l1, on, eq_f == 0 ? 1 : 0, NULL);
+        draw_chip(x2, cy0, l2, loud, eq_f == 0 ? 0.5f : 0, NULL);
+        if (hit(x1, cy0, w1, 30)) { eq_enable(!on); eq_changed(); }
+        if (hit(x2, cy0, w2, 30)) { eq_set_loud(!loud); eq_changed(); toast(!loud ? "Loud mode: quiet songs come up, peaks stay clean" : "Loud mode off"); }
+    }
+    /* presets */
+    int cur = on ? eq_matching_preset() : -1;
+    float py = y + 66;
+    text(F_META, 11, x + 28, py + 4, col_a(T->text3, a), "PRESETS");
+    float px = x + 28 - eq_psx;
+    gfx_clip(x + 16, py + 10, w - 32, 44);
+    float cxs[EQ_PRESET_COUNT], cws[EQ_PRESET_COUNT];
+    for (int i = 0; i < EQ_PRESET_COUNT; i++) {
+        float cw = text_w(F_SEMI, 13, EQ_PRESETS[i].name) + 28;
+        cxs[i] = px;
+        cws[i] = cw;
+        draw_chip(px, py + 16, EQ_PRESETS[i].name, cur == i, eq_f == 1 && eq_preset() == i && cur != i ? 0.6f : 0, NULL);
+        if (hit(px, py + 16, cw, 30) && !in.dragging) { eq_apply_preset(i); eq_changed(); }
+        px += cw + 8;
+    }
+    gfx_noclip();
+    {
+        int fp = eq_preset();
+        float right = cxs[fp] + eq_psx + cws[fp];
+        if (right - eq_psx_t > w - 56) eq_psx_t = right - (w - 56);
+        if (cxs[fp] + eq_psx - eq_psx_t < x + 28) eq_psx_t = cxs[fp] + eq_psx - x - 28;
+        if (eq_psx_t < 0) eq_psx_t = 0;
+        if (in.dragging && touch_in(x, py + 10, w, 44)) { eq_psx -= in.ddx; eq_psx_t = eq_psx; }
+        eq_psx = in.touching ? eq_psx : approach(eq_psx, eq_psx_t, 14, dt);
+    }
+    if (cur < 0 && on) text_right(F_META, 11, x + w - 28, py + 4, col_a(T->accent, a), "CUSTOM");
+    /* sliders */
+    float top = y + 140, sh = 200, colw = (w - 56) / EQ_BANDS;
+    gfx_rect(x + 28, top + sh / 2, w - 56, 1, col_a(0xFFFFFFFF, 0.12f * a)); /* 0 dB */
+    for (int b = 0; b < EQ_BANDS; b++) {
+        float cx = x + 28 + colw * (b + 0.5f);
+        float g = eq_band(b);
+        float k = (g + 12) / 24;
+        float f = eq_f == 2 && eq_band_i == b ? 1 : 0;
+        gfx_rrect(cx - 3, top, 6, sh, 3, col_a(0xFFFFFFFF, 0.14f * a));
+        float ky = top + sh * (1 - k), mid = top + sh / 2;
+        col_t fill = on ? T->accent : col_a(0xFFFFFFFF, 0.35f);
+        if (ky < mid) gfx_rrect(cx - 3, ky, 6, mid - ky, 3, col_a(fill, a));
+        else gfx_rrect(cx - 3, mid, 6, ky - mid, 3, col_a(fill, a));
+        gfx_circle(cx, ky, f || eq_drag == b ? 11 : 9, col_a(0xFFFFFFFF, a));
+        if (f) gfx_ring(cx, ky, 15, 2, col_a(T->accent, a));
+        char dbs[16];
+        snprintf(dbs, sizeof(dbs), "%+.0f dB", g);
+        text_center(F_META, 11, cx, top - 12, col_a(f ? T->text : T->text3, a), dbs);
+        text_center(F_SEMI, 13, cx, top + sh + 24, col_a(T->text2, a), EQ_LABEL[b]);
+        if (in.touching && (eq_drag == b || (eq_drag < 0 && fabsf(in.sx - cx) < colw / 2 && in.sy > top - 20 && in.sy < top + sh + 20))) {
+            eq_drag = b;
+            eq_band_i = b;
+            eq_f = 2;
+            float ng = roundf((1 - clampf((in.ty - top) / sh, 0, 1)) * 24 - 12);
+            if (ng != g) { eq_set_band(b, ng); if (!on) eq_enable(1); }
+        }
+    }
+    if (eq_drag >= 0 && !in.touching) { eq_drag = -1; eq_changed(); }
+    text(F_META, 10, x + 28, top + sh + 24, col_a(T->text3, a), "Hz");
+    text_center(F_META, 11, x + w / 2, y + h - 18, col_a(T->text3, a),
+                "Left / Right pick  -  Up / Down change  -  L / R presets  -  SQUARE equaliser on/off  -  TRIANGLE loud mode");
+    /* keys */
+    if (in.repeat & B_LEFT) { if (eq_f == 2 && eq_band_i > 0) eq_band_i--; else if (eq_f == 1) { eq_apply_preset((eq_preset() + EQ_PRESET_COUNT - 1) % EQ_PRESET_COUNT); eq_changed(); } sfx(0); }
+    if (in.repeat & B_RIGHT) { if (eq_f == 2 && eq_band_i < EQ_BANDS - 1) eq_band_i++; else if (eq_f == 1) { eq_apply_preset((eq_preset() + 1) % EQ_PRESET_COUNT); eq_changed(); } sfx(0); }
+    if (in.repeat & B_UP) {
+        if (eq_f == 2) { eq_set_band(eq_band_i, eq_band(eq_band_i) + 1); if (!on) eq_enable(1); eq_changed(); }
+        else if (eq_f > 0) eq_f--;
+        sfx(0);
+    }
+    if (in.repeat & B_DOWN) {
+        if (eq_f == 2) { eq_set_band(eq_band_i, eq_band(eq_band_i) - 1); if (!on) eq_enable(1); eq_changed(); }
+        else eq_f++;
+        sfx(0);
+    }
+    if (in.pressed & B_OK) {
+        if (eq_f == 0) { eq_enable(!on); eq_changed(); }
+        else if (eq_f == 1) { eq_apply_preset(eq_preset()); eq_changed(); eq_f = 2; }
+        else eq_f = 1;
+    }
+    if (in.pressed & B_L) { eq_apply_preset((eq_preset() + EQ_PRESET_COUNT - 1) % EQ_PRESET_COUNT); eq_changed(); }
+    if (in.pressed & B_R) { eq_apply_preset((eq_preset() + 1) % EQ_PRESET_COUNT); eq_changed(); }
+    if (in.pressed & B_SQR) { eq_enable(!on); eq_changed(); toast(!on ? "Equaliser on" : "Equaliser off"); }
+    if (in.pressed & B_TRI) { eq_set_loud(!loud); eq_changed(); toast(!loud ? "Loud mode on" : "Loud mode off"); }
+    if (in.tap && !touch_in(x, y, w, h)) eq_open = 0;
+}
 
 void nowplaying_open(void) {
     nf = 1;
@@ -1125,16 +1232,16 @@ static void np_action(int row, int b) {
             break;
         case 1: if (ti >= 0) { menu_track = ti; pick_playlist(); } break;
         case 2: queue_open = !queue_open; qf = 0; break;
-        case 3: sleep_menu(); break;
-        case 4: mus_screen_off(); break;
-        case 5: break; /* volume: left / right */
+        case 3: eq_open = 1; eq_f = 1; break;
+        case 4: sleep_menu(); break;
+        case 5: mus_screen_off(); break;
         }
     }
 }
 
 static void draw_queue(float dt, float a) {
     int cur = 0;
-    int n = mus_queue(qbuf, 4096, &cur);
+    int n = mus_queue(qbuf, 8192, &cur);
     float x = SCR_W - 440, w = 420, y0 = 20, h = SCR_H - 40;
     gfx_shadow(x, y0 + 8, w, h, T->radius, 30, col_a(0xFF000000, 0.55f * a));
     gfx_rrect(x, y0, w, h, T->radius, col_a(col_mix(T->bg, 0xFF000000, 0.35f), 0.97f * a));
@@ -1199,6 +1306,15 @@ void nowplaying_frame(float dt) {
     qa = approach(qa, queue_open ? 1 : 0, 12, dt);
 
     /* ---------- input ---------- */
+    eq_a = approach(eq_a, eq_open ? 1 : 0, 14, dt);
+    Input keep = in;
+    if (eq_open) { /* the sound panel has the buttons */
+        if (in.pressed & B_BACK) { eq_open = 0; sfx(2); }
+        in.pressed = in.repeat = 0;
+        in.tap = in.long_press = in.double_tap = 0;
+        in.touching = 0;
+        in.dragging = 0;
+    }
     if (in.pressed & B_BACK) {
         if (queue_open) queue_open = 0;
         else { sfx(2); nav_pop(); return; }
@@ -1210,18 +1326,16 @@ void nowplaying_frame(float dt) {
     if (!queue_open) {
         int moved = 0;
         int maxb = nf == 1 ? 4 : 5;
-        if (in.repeat & B_UP && nf > 0) { nf--; moved = 1; if (nf == 1) nb = 2; }
-        if (in.repeat & B_DOWN && nf < 2) { nf++; moved = 1; nb = nf == 1 ? 2 : 0; }
+        if (in.repeat & B_UP && nf > 0) { nf--; moved = 1; if (nf == 1) nb = 2; else if (nf == 2) nb = 0; }
+        if (in.repeat & B_DOWN && nf < 3) { nf++; moved = 1; nb = nf == 1 ? 2 : 0; }
         if (nf == 0) {
             if (in.repeat & B_LEFT) mus_seek(mus_pos_ms() - 5000);
             if (in.repeat & B_RIGHT) mus_seek(mus_pos_ms() + 5000);
             if (in.pressed & B_OK) mus_toggle();
-        } else if (nf == 2 && nb == 5) {
-            if (in.repeat & B_LEFT) {
-                if (mus_volume() == 0) nb = 4, moved = 1;
-                else { mus_set_volume(mus_volume() - 5); db_seti("music_vol", mus_volume()); }
-            }
+        } else if (nf == 3) {
+            if (in.repeat & B_LEFT) { mus_set_volume(mus_volume() - 5); db_seti("music_vol", mus_volume()); }
             if (in.repeat & B_RIGHT) { mus_set_volume(mus_volume() + 5); db_seti("music_vol", mus_volume()); }
+            if (in.pressed & B_OK) { eq_open = 1; eq_f = 1; }
         } else {
             if (in.repeat & B_LEFT && nb > 0) nb--, moved = 1;
             if (in.repeat & B_RIGHT && nb < maxb) nb++, moved = 1;
@@ -1265,7 +1379,7 @@ void nowplaying_frame(float dt) {
     float ty = 190;
     int tfs = T->display_font == 2 ? 24 : 30;
     if (text_w(F_DISPLAY, tfs, t->title) > rw) tfs = tfs * 4 / 5;
-    text_ellipsis(F_DISPLAY, tfs, rx, ty, rw - 40, 0xFFFFFFFF, t->title);
+    text_ellipsis(F_DISPLAY, tfs, rx, ty, rw, 0xFFFFFFFF, t->title);
     text_ellipsis(F_SEMI, 17, rx, ty + 30, rw - 40, col_a(0xFFFFFFFF, 0.8f), t->artist);
     char al[300];
     if (t->year) snprintf(al, sizeof(al), "%s \xc2\xb7 %d", t->album[0] ? t->album : "Single", t->year);
@@ -1273,9 +1387,6 @@ void nowplaying_frame(float dt) {
     text_ellipsis(F_REG, 14, rx, ty + 52, rw - 40, col_a(0xFFFFFFFF, 0.55f), al);
     if (hit(rx, ty + 14, rw, 22)) mpage_open(FROM_ARTIST, t->artist_i);
     if (hit(rx, ty + 38, rw, 22)) mpage_open(FROM_ALBUM, t->album_i);
-    /* heart next to the title */
-    icon(t->liked ? IC_HEART_FILL : IC_HEART, rx + rw - 10, ty - 8, 22, t->liked ? T->accent : col_a(0xFFFFFFFF, 0.8f));
-    if (hit(rx + rw - 34, ty - 32, 48, 48)) np_action(2, 0);
 
     /* ---------- seek bar ---------- */
     float sx = rx, sw = rw, sy = 290;
@@ -1302,7 +1413,7 @@ void nowplaying_frame(float dt) {
     text_right(F_META, 12, sx + sw, sy + 24, col_a(0xFFFFFFFF, 0.65f), dur ? a2 : "");
 
     /* ---------- main controls ---------- */
-    float cy = 372, cx0 = rx + sw / 2;
+    float cy = 362, cx0 = rx + sw / 2;
     float bx[5] = {cx0 - 190, cx0 - 95, cx0, cx0 + 95, cx0 + 190};
     int playing = mus_playing();
     for (int i = 0; i < 5; i++) {
@@ -1333,55 +1444,65 @@ void nowplaying_frame(float dt) {
     }
 
     /* ---------- extras row ---------- */
-    float ey = 452;
-    int ics[5] = {t->liked ? IC_HEART_FILL : IC_HEART, IC_PLUS, IC_QUEUE, IC_TIMER, IC_SCREEN_OFF};
-    for (int i = 0; i < 5; i++) {
-        float x = rx + 14 + i * 56;
-        float f = nf == 2 && nb == i && !queue_open ? 1 : 0;
+    float ey = 432;
+    int ics[6] = {t->liked ? IC_HEART_FILL : IC_HEART, IC_PLUS, IC_QUEUE, IC_EQ, IC_TIMER, IC_SCREEN_OFF};
+    static const char *elab[6] = {"Like", "Playlist", "Queue", "Sound", "Sleep", "Screen off"};
+    float estep = rw / 6;
+    for (int i = 0; i < 6; i++) {
+        float x = rx + estep * (i + 0.5f);
+        float f = nf == 2 && nb == i && !queue_open && !eq_open ? 1 : 0;
         if (f) gfx_circle(x, ey, 21, col_a(0xFFFFFFFF, 0.16f));
         col_t c = col_a(0xFFFFFFFF, 0.8f);
         if (i == 0 && t->liked) c = T->accent;
         if (i == 2 && queue_open) c = T->accent;
-        if (i == 3 && mus_sleep_left()) c = T->accent;
+        if (i == 3 && (eq_enabled() || eq_loud())) c = T->accent;
+        if (i == 4 && mus_sleep_left()) c = T->accent;
         icon(ics[i], x, ey, 20, c);
         if (f) gfx_ring(x, ey, 21, 1.5f, col_a(0xFFFFFFFF, 0.6f));
-        if (hit(x - 24, ey - 24, 48, 48)) { nf = 2; nb = i; np_action(2, i); }
-    }
-    if (mus_sleep_left()) {
+        const char *lab = elab[i];
         char sl[32];
-        int s = mus_sleep_left();
-        if (s < 0) snprintf(sl, sizeof(sl), "end of song");
-        else snprintf(sl, sizeof(sl), "%d:%02d", s / 60, s % 60);
-        text_center(F_META, 10, rx + 14 + 3 * 56, ey + 30, T->accent, sl);
+        if (i == 4 && mus_sleep_left()) {
+            int s2 = mus_sleep_left();
+            if (s2 < 0) snprintf(sl, sizeof(sl), "end of song");
+            else snprintf(sl, sizeof(sl), "%d:%02d", s2 / 60, s2 % 60);
+            lab = sl;
+        }
+        if (i == 3 && eq_enabled()) {
+            int pr = eq_matching_preset();
+            lab = pr >= 0 ? EQ_PRESETS[pr].name : "Custom";
+        }
+        text_center(F_META, 10, x, ey + 32, f || c != col_a(0xFFFFFFFF, 0.8f) ? c : col_a(0xFFFFFFFF, 0.5f), lab);
+        if (hit(x - 26, ey - 26, 52, 60)) { nf = 2; nb = i; np_action(2, i); }
     }
-    /* volume slider */
+    /* volume: its own row, 0-100% normal and up to 200% boost */
     {
-        float vx = rx + 14 + 5 * 56 - 10, vw = sx + sw - vx - 6;
-        float f = nf == 2 && nb == 5 && !queue_open ? 1 : 0;
-        icon(IC_VOLUME, vx, ey, 18, col_a(0xFFFFFFFF, 0.8f));
-        float bx0 = vx + 24, bw = vw - 30;
+        float vy = 492;
+        float f = nf == 3 && !queue_open && !eq_open ? 1 : 0;
+        icon(IC_VOLUME, rx + 10, vy, 18, col_a(0xFFFFFFFF, 0.8f));
+        float bx0 = rx + 34, bw = rw - 34 - 56;
         int v = mus_volume();
-        if (in.touching && (vol_drag || (fabsf(in.sy - ey) < 20 && in.sx > bx0 - 12 && in.sx < bx0 + bw + 12))) {
+        if (!eq_open && !queue_open && in.touching && (vol_drag || (fabsf(in.sy - vy) < 20 && in.sx > bx0 - 12 && in.sx < bx0 + bw + 12))) {
             vol_drag = 1;
             int nv = (int)roundf(clampf((in.tx - bx0) / bw, 0, 1) * 200 / 5) * 5;
             if (nv != v) mus_set_volume(nv);
-            nf = 2;
-            nb = 5;
+            nf = 3;
         }
         if (vol_drag && !in.touching) { vol_drag = 0; db_seti("music_vol", mus_volume()); }
         v = mus_volume();
         float k = v / 200.0f;
-        gfx_rrect(bx0, ey - 2, bw, 4, 2, col_a(0xFFFFFFFF, 0.22f));
+        gfx_rrect(bx0, vy - 2, bw, 4, 2, col_a(0xFFFFFFFF, 0.22f));
+        gfx_rrect(bx0 + bw * 0.5f, vy - 2, bw * 0.5f, 4, 2, col_a(T->accent, 0.18f)); /* the boost zone */
         if (v > 100) {
-            gfx_rrect(bx0, ey - 2, bw * 0.5f, 4, 2, 0xFFFFFFFF);
-            gfx_rrect(bx0 + bw * 0.5f, ey - 2, bw * (k - 0.5f), 4, 2, T->accent);
-        } else gfx_rrect(bx0, ey - 2, fmaxf(4, bw * k), 4, 2, 0xFFFFFFFF);
-        gfx_rect(bx0 + bw * 0.5f - 1, ey - 6, 2, 12, col_a(0xFFFFFFFF, 0.5f));
-        gfx_circle(bx0 + bw * k, ey, f || vol_drag ? 8 : 6, 0xFFFFFFFF);
-        if (f) gfx_ring(bx0 + bw * k, ey, 12, 2, T->accent);
+            gfx_rrect(bx0, vy - 2, bw * 0.5f, 4, 2, 0xFFFFFFFF);
+            gfx_rrect(bx0 + bw * 0.5f, vy - 2, bw * (k - 0.5f), 4, 2, T->accent);
+        } else gfx_rrect(bx0, vy - 2, fmaxf(4, bw * k), 4, 2, 0xFFFFFFFF);
+        gfx_rect(bx0 + bw * 0.5f - 1, vy - 6, 2, 12, col_a(0xFFFFFFFF, 0.5f));
+        gfx_circle(bx0 + bw * k, vy, f || vol_drag ? 8 : 6, 0xFFFFFFFF);
+        if (f) gfx_ring(bx0 + bw * k, vy, 12, 2, T->accent);
         char vl[16];
         snprintf(vl, sizeof(vl), "%d%%", v);
-        if (f || vol_drag || v > 100) text_center(F_META, 10, bx0 + bw * k, ey + 24, v > 100 ? T->accent : col_a(0xFFFFFFFF, 0.7f), vl);
+        text_right(F_SEMI, 13, rx + rw, vy + 5, v > 100 ? T->accent : col_a(0xFFFFFFFF, 0.75f), vl);
+        if (v > 100) text_center(F_META, 9, bx0 + bw * 0.75f, vy - 10, col_a(T->accent, 0.8f), "BOOST");
     }
 
     /* little level bars under the cover */
@@ -1398,7 +1519,19 @@ void nowplaying_frame(float dt) {
         draw_queue(dt, qa);
         if (in.tap && in.tap_x < SCR_W - 440) queue_open = 0;
     }
-    if (!modal_active() && !queue_open) {
+    in = keep;
+    if (eq_a > 0.01f) {
+        gfx_rect(0, 0, SCR_W, SCR_H, col_a(0xFF000000, 0.45f * eq_a));
+        if (eq_open) draw_eq(dt, eq_a);
+        else {
+            Input none = in;
+            in.pressed = in.repeat = 0;
+            in.tap = in.touching = in.dragging = 0;
+            draw_eq(dt, eq_a);
+            in = none;
+        }
+    }
+    if (!modal_active() && !queue_open && !eq_open) {
         text_center(F_META, 11, SCR_W / 2, SCR_H - 14, col_a(0xFFFFFFFF, 0.4f),
                     "L / R skip \xc2\xb7 SQUARE play / pause \xc2\xb7 TRIANGLE queue \xc2\xb7 SELECT screen off \xc2\xb7 START options");
     }

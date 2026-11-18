@@ -24,7 +24,7 @@ static volatile float level;
 static Dec *dec;
 static volatile int cur_track = -1;
 static volatile int cur_rate = 44100;
-static volatile uint64_t cur_frames, cur_pos;
+static volatile uint64_t cur_frames;
 static char from_label[128];
 static int from_kind, from_idx;
 static volatile int sleep_end_song;
@@ -60,10 +60,24 @@ static void shuffle_rest(void) {
     }
 }
 
-/* ---------------- the audio thread ---------------- */
+/* ---------------- the two audio threads ----------------
+   A decoder thread keeps about a second and a half of music ready in a ring,
+   and the output thread plays from it. Slow memory card moments (a scan,
+   a big cover image) never reach your ears. */
 
+#define RING 65536 /* frames, a power of two */
+static int16_t ring[RING * 2];
+static volatile unsigned rd, wr;      /* free-running frame counters */
+static volatile int ring_eof;         /* the decoder reached the end of this song */
+static volatile int ring_rate = 48000;/* rate of what's in the ring */
+static volatile int gen;              /* goes up on every load / seek / stop */
+static volatile int want_stop;
+static volatile uint64_t out_pos;     /* source frames played so far */
+static volatile int decim = 1;
+static SceUID th_dec = -1;
 static int16_t outbuf[1024 * 2];
 static int16_t decbuf[4096 * 2];
+static int16_t dtmp[1024 * 2];
 
 /* move on after a song ends; returns 0 when there's nothing left */
 static int advance(int user) {
@@ -73,7 +87,126 @@ static int advance(int user) {
     if (repeat_mode == REPEAT_ALL || user) {
         qi = 0;
         if (shuffle_on) { qi = -1; shuffle_rest(); qi = 0; }
-        return repeat_mode == REPEAT_ALL || user ? 1 : 0;
+        return 1;
+    }
+    return 0;
+}
+
+static void ring_reset(void) {
+    rd = wr = 0;
+    ring_eof = 0;
+    gen++;
+}
+
+static int decode_thread(SceSize a, void *arg) {
+    (void)a;
+    (void)arg;
+    static char path[1024];
+    for (;;) {
+        lock();
+        if (want_stop) {
+            want_stop = 0;
+            Dec *old = dec;
+            dec = NULL;
+            cur_track = -1;
+            ring_reset();
+            out_pos = 0;
+            unlock();
+            if (old) dec_close(old);
+            continue;
+        }
+        if (want_load) {
+            want_load = 0;
+            Dec *old = dec;
+            dec = NULL;
+            cur_track = -1;
+            ring_reset();
+            out_pos = 0;
+            int t = qi >= 0 && qi < qn && qord[qi] >= 0 && qord[qi] < M.nt ? qord[qi] : -1;
+            if (t >= 0) snprintf(path, sizeof(path), "%s", M.t[t].path);
+            unlock();
+            if (old) dec_close(old);
+            if (t < 0) continue;
+            Dec *d = dec_open(path); /* outside the lock: the menus never wait on a slow file */
+            lock();
+            if (want_load || want_stop) { /* something else was picked meanwhile */
+                unlock();
+                if (d) dec_close(d);
+                continue;
+            }
+            if (!d) { /* this one won't open: skip it */
+                if (advance(0) && qn > 1) want_load = 1;
+                else playing = 0;
+                unlock();
+                continue;
+            }
+            dec = d;
+            cur_track = t;
+            int r = dec_rate(d);
+            decim = r > 48000 ? (r + 47999) / 48000 : 1;
+            int pr = r / decim;
+            static const int ok_rates[] = {8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000};
+            int best = 48000;
+            for (int i = 0; i < 9; i++)
+                if (abs(ok_rates[i] - pr) < abs(best - pr)) best = ok_rates[i];
+            ring_rate = best;
+            cur_rate = r;
+            cur_frames = dec_frames(d);
+            if (!cur_frames && t < M.nt && M.t[t].dur > 0) cur_frames = (uint64_t)M.t[t].dur * r / 1000;
+            g_mus_started_track = t;
+            unlock();
+            continue;
+        }
+        if (want_seek >= 0 && dec) {
+            uint64_t f = (uint64_t)want_seek * cur_rate / 1000;
+            if (cur_frames && f >= cur_frames) f = cur_frames - 1;
+            dec_seek(dec, f);
+            ring_reset();
+            out_pos = dec_pos(dec);
+            want_seek = -1;
+        }
+        int space = RING - (int)(wr - rd);
+        int can = dec && !ring_eof && space >= 1100;
+        int my_gen = gen, dm = decim;
+        Dec *d = dec;
+        unlock();
+        if (!can) {
+            sceKernelDelayThread(6000);
+            continue;
+        }
+        /* only this thread ever closes the decoder, so it is safe to use without the lock */
+        int need = 1024 * dm, got = 0;
+        while (got < need) {
+            int n = dec_read(d, decbuf + got * 2, need - got);
+            if (n <= 0) break;
+            got += n;
+        }
+        int outn = got;
+        const int16_t *src = decbuf;
+        if (dm > 1) {
+            outn = got / dm;
+            for (int i = 0; i < outn; i++) {
+                int l = 0, r = 0;
+                for (int k = 0; k < dm; k++) {
+                    l += decbuf[(i * dm + k) * 2];
+                    r += decbuf[(i * dm + k) * 2 + 1];
+                }
+                dtmp[i * 2] = (int16_t)(l / dm);
+                dtmp[i * 2 + 1] = (int16_t)(r / dm);
+            }
+            src = dtmp;
+        }
+        lock();
+        if (gen == my_gen) {
+            for (int i = 0; i < outn; i++) {
+                unsigned p = (wr + i) & (RING - 1);
+                ring[p * 2] = src[i * 2];
+                ring[p * 2 + 1] = src[i * 2 + 1];
+            }
+            wr += outn;
+            if (got < need) ring_eof = 1;
+        }
+        unlock();
     }
     return 0;
 }
@@ -83,53 +216,12 @@ static int play_thread(SceSize a, void *arg) {
     (void)arg;
     /* the Vita has one music (BGM) channel: hold it only while songs play, so videos get it */
     int port = -1;
-    int port_rate = 48000, port_vol = -1, decim = 1;
-    float lim_state = 1;
+    int port_rate = 48000, port_vol = -1;
+    DspState dsp = {1};
     SceUInt64 last_tick = 0;
     for (;;) {
-        lock();
-        if (want_load) {
-            want_load = 0;
-            if (dec) { dec_close(dec); dec = NULL; }
-            cur_track = -1;
-            if (qi >= 0 && qi < qn && qord[qi] >= 0 && qord[qi] < M.nt) {
-                int t = qord[qi];
-                dec = dec_open(M.t[t].path);
-                if (dec) {
-                    cur_track = t;
-                    int r = dec_rate(dec);
-                    decim = r > 48000 ? (r + 47999) / 48000 : 1;
-                    int pr = r / decim;
-                    static const int ok_rates[] = {8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000};
-                    int best = 48000;
-                    for (int i = 0; i < 9; i++)
-                        if (abs(ok_rates[i] - pr) < abs(best - pr)) best = ok_rates[i];
-                    if (best != port_rate) {
-                        if (port >= 0) sceAudioOutSetConfig(port, -1, best, SCE_AUDIO_OUT_MODE_STEREO);
-                        port_rate = best;
-                    }
-                    cur_rate = r;
-                    cur_frames = dec_frames(dec);
-                    if (!cur_frames && M.t[t].dur > 0) cur_frames = (uint64_t)M.t[t].dur * r / 1000;
-                    cur_pos = 0;
-                    g_mus_started_track = t;
-                } else {
-                    /* can't open this one: skip it */
-                    if (advance(0) && qn > 1) want_load = 1;
-                    else playing = 0;
-                }
-            }
-        }
-        if (want_seek >= 0 && dec) {
-            uint64_t f = (uint64_t)want_seek * cur_rate / 1000;
-            if (cur_frames && f >= cur_frames) f = cur_frames - 1;
-            dec_seek(dec, f);
-            cur_pos = dec_pos(dec);
-            want_seek = -1;
-        }
-        int go = playing && dec;
-        unlock();
-        if (release_req || (!go && port >= 0 && !playing)) {
+        int go = playing && (cur_track >= 0 || want_load);
+        if (release_req || (!playing && port >= 0)) {
             if (port >= 0) {
                 sceAudioOutReleasePort(port);
                 port = -1;
@@ -137,7 +229,13 @@ static int play_thread(SceSize a, void *arg) {
             port_released = 1;
             release_req = 0;
         }
-        if (go && port < 0) {
+        if (!go) {
+            level = 0;
+            sceKernelDelayThread(8000);
+            continue;
+        }
+        if (port < 0) {
+            port_rate = ring_rate;
             port = sceAudioOutOpenPort(SCE_AUDIO_OUT_PORT_TYPE_BGM, 1024, port_rate, SCE_AUDIO_OUT_MODE_STEREO);
             if (port < 0) { /* a video still has it */
                 sceKernelDelayThread(50000);
@@ -146,16 +244,10 @@ static int play_thread(SceSize a, void *arg) {
             port_released = 0;
             port_vol = -1;
         }
-
-        if (port >= 0 && port_vol != vol_hw) {
+        if (port_vol != vol_hw) {
             int v[2] = {vol_hw, vol_hw};
             sceAudioOutSetVolume(port, SCE_AUDIO_VOLUME_FLAG_L_CH | SCE_AUDIO_VOLUME_FLAG_R_CH, v);
             port_vol = vol_hw;
-        }
-        if (!go) {
-            level = 0;
-            sceKernelDelayThread(8000);
-            continue;
         }
         /* keep the Vita from going to sleep while music plays */
         SceUInt64 now = sceKernelGetProcessTimeWide();
@@ -168,56 +260,51 @@ static int play_thread(SceSize a, void *arg) {
             playing = 0;
             continue;
         }
-        /* decode one buffer */
-        int need = 1024 * decim;
-        int got = 0;
+        /* take a buffer from the ring */
         lock();
-        while (got < need && dec) {
-            int n = dec_read(dec, decbuf + got * 2, need - got);
-            if (n <= 0) break;
-            got += n;
-        }
-        cur_pos = dec ? dec_pos(dec) : 0;
-        int ended = got < need;
-        unlock();
-        if (decim > 1) {
-            int outn = got / decim;
-            for (int i = 0; i < outn; i++) {
-                int l = 0, r = 0;
-                for (int k = 0; k < decim; k++) {
-                    l += decbuf[(i * decim + k) * 2];
-                    r += decbuf[(i * decim + k) * 2 + 1];
-                }
-                outbuf[i * 2] = (int16_t)(l / decim);
-                outbuf[i * 2 + 1] = (int16_t)(r / decim);
+        int avail = (int)(wr - rd), eof = ring_eof, n = 0;
+        if (cur_track >= 0 && (avail >= 1024 || (eof && avail > 0))) {
+            n = avail < 1024 ? avail : 1024;
+            for (int i = 0; i < n; i++) {
+                unsigned p = (rd + i) & (RING - 1);
+                outbuf[i * 2] = ring[p * 2];
+                outbuf[i * 2 + 1] = ring[p * 2 + 1];
             }
-            got = outn;
-        } else {
-            memcpy(outbuf, decbuf, got * 4);
+            rd += n;
+            out_pos += (uint64_t)n * decim;
         }
-        if (got < 1024) memset(outbuf + got * 2, 0, (1024 - got) * 4);
-        int g = vol_gain, peak = 0;
-        if (g != 256) boost_apply(outbuf, 1024, 2, g / 256.0f, &lim_state);
-        for (int i = 0; i < 2048; i++) {
-            int v = outbuf[i] < 0 ? -outbuf[i] : outbuf[i];
-            if (v > peak) peak = v;
+        int drained = cur_track >= 0 && eof && wr == rd;
+        int rate_now = ring_rate;
+        unlock();
+        if (n > 0) {
+            if (rate_now != port_rate) {
+                sceAudioOutSetConfig(port, -1, rate_now, SCE_AUDIO_OUT_MODE_STEREO);
+                port_rate = rate_now;
+            }
+            if (n < 1024) memset(outbuf + n * 2, 0, (1024 - n) * 4);
+            dsp_run(outbuf, 1024, port_rate, vol_gain / 256.0f, &dsp); /* EQ, loud mode, boost, limiter */
+            int peak = 0;
+            for (int i = 0; i < 2048; i += 4) {
+                int v = outbuf[i] < 0 ? -outbuf[i] : outbuf[i];
+                if (v > peak) peak = v;
+            }
+            level = level * 0.6f + (peak / 32768.0f) * 0.4f;
+            sceAudioOutOutput(port, outbuf);
+        } else if (!drained) {
+            sceKernelDelayThread(3000); /* the decoder is catching up (or opening the next song) */
         }
-        level = level * 0.6f + (peak / 32768.0f) * 0.4f;
-        if (got > 0) sceAudioOutOutput(port, outbuf);
-        if (ended) {
+        if (drained) { /* the song is over */
             lock();
             if (sleep_end_song) {
                 sleep_end_song = 0;
                 playing = 0;
                 if (advance(0)) want_load = 1;
             } else if (advance(0)) want_load = 1;
-            else {
+            else { /* end of the queue: stop on the last song, ready to play it again */
                 playing = 0;
-                if (dec) { dec_close(dec); dec = NULL; }
-                cur_track = qi >= 0 && qi < qn ? qord[qi] : -1;
-                cur_pos = 0;
-                want_load = 1; /* ready to play the last song again */
+                want_load = 1;
             }
+            ring_eof = 0; /* handled */
             unlock();
         }
     }
@@ -228,7 +315,9 @@ static void ensure_thread(void) {
     if (th >= 0) return;
     mtx = sceKernelCreateMutex("nest_mus", 0, 0, NULL);
     sceAppMgrAcquireBgmPort(); /* keep playing when Nest isn't in front */
-    th = sceKernelCreateThread("nest_music", play_thread, 0x10000100 - 20, 0x40000, 0, 0, NULL);
+    th_dec = sceKernelCreateThread("nest_mdec", decode_thread, 0x10000100 - 10, 0x40000, 0, 0, NULL);
+    if (th_dec >= 0) sceKernelStartThread(th_dec, 0, NULL);
+    th = sceKernelCreateThread("nest_music", play_thread, 0x10000100 - 20, 0x10000, 0, 0, NULL);
     if (th >= 0) sceKernelStartThread(th, 0, NULL);
     rnd_state ^= (uint32_t)sceKernelGetProcessTimeWide();
     mus_set_volume(db_geti("music_vol", 100));
@@ -302,7 +391,7 @@ void mus_stop(void) {
     playing = 0;
     qn = qbn = 0;
     qi = -1;
-    if (dec) { dec_close(dec); dec = NULL; }
+    want_stop = 1;
     cur_track = -1;
     unlock();
 }
@@ -435,7 +524,7 @@ int mus_current(void) {
 }
 int mus_pos_ms(void) {
     if (want_seek >= 0) return want_seek;
-    return cur_rate > 0 ? (int)(cur_pos * 1000 / cur_rate) : 0;
+    return cur_rate > 0 ? (int)(out_pos * 1000 / cur_rate) : 0;
 }
 int mus_dur_ms(void) {
     if (cur_frames && cur_rate) return (int)(cur_frames * 1000 / cur_rate);
@@ -524,7 +613,7 @@ void mus_remap_end(void) {
     rm_cur = NULL;
     if (qn == 0) {
         playing = 0;
-        if (dec) { dec_close(dec); dec = NULL; }
+        want_stop = 1;
     }
     g_mus_started_track = -1;
     unlock();

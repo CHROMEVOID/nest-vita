@@ -115,6 +115,27 @@ void mus_screen_off(void);
 int mus_screen_is_off(void);
 void mus_screen_wake(void);
 
+/* ---- sound (dsp.c) ---- */
+#define EQ_BANDS 6
+#define EQ_PRESET_COUNT 10
+typedef struct { const char *name; float db[EQ_BANDS]; } EqPreset;
+typedef struct { float lim; } DspState;
+extern const int EQ_FREQ[EQ_BANDS];
+extern const char *EQ_LABEL[EQ_BANDS];
+extern const EqPreset EQ_PRESETS[EQ_PRESET_COUNT];
+void eq_set_band(int b, float db);
+float eq_band(int b);
+void eq_enable(int on);
+int eq_enabled(void);
+void eq_set_loud(int on);
+int eq_loud(void);
+int eq_preset(void);
+void eq_apply_preset(int p);
+int eq_matching_preset(void);
+void eq_save(void);
+void eq_load(void);
+void dsp_run(int16_t *buf, int frames, int rate, float gain, DspState *st);
+
 /* ---- screens (music_ui.c) ---- */
 void music_tab_frame(float dt, int focused, int *want_nav); /* the Music tab inside the main screen */
 void music_tab_enter(void);

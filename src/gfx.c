@@ -749,6 +749,14 @@ void icon(int id, float cx, float cy, float s, col_t c) {
         L(9, 20, 15, 20);
         gfx_circle(X(12), Y(11), 3.2f * k, c);
         break;
+    case IC_EQ: /* three sliders */
+        L(6, 4, 6, 20);
+        L(12, 4, 12, 20);
+        L(18, 4, 18, 20);
+        gfx_circle(X(6), Y(14), 2.8f * k, c);
+        gfx_circle(X(12), Y(8), 2.8f * k, c);
+        gfx_circle(X(18), Y(16), 2.8f * k, c);
+        break;
     case IC_MIC:
         gfx_rrect_outline(X(9), Y(3), 6 * k, 11 * k, 3 * k, t, c);
         L(6, 11, 6, 12);

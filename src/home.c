@@ -387,11 +387,13 @@ static void draw_hero(float y0, float dt, int focused) {
     /* clearlogo or title */
     float fade = 0;
     vita2d_texture *logo = t->logo ? img_get(t->logo, 380, 120, &fade) : NULL;
-    if (logo && fade > 0) {
-        float lw = vita2d_texture_get_width(logo), lh = vita2d_texture_get_height(logo);
-        /* logos come in every shape: keep them inside a box that leaves room for the text below */
-        float s = fminf(300 / lw, 72 / lh);
-        vita2d_draw_texture_tint_scale(logo, x, y + 6 + (72 - lh * s), s, s, col_a(0xFFFFFFFF, ta * fade));
+    if (t->logo) {
+        /* the logo always gets the same box, loaded or not, so nothing below it jumps */
+        if (logo && fade > 0) {
+            float lw = vita2d_texture_get_width(logo), lh = vita2d_texture_get_height(logo);
+            float s = fminf(300 / lw, 72 / lh);
+            vita2d_draw_texture_tint_scale(logo, x, y + 6 + (72 - lh * s), s, s, col_a(0xFFFFFFFF, ta * ease_out(fade)));
+        }
         y += 88;
     } else {
         int size = T->display_font == 2 ? 30 : 40;
@@ -435,9 +437,14 @@ static void draw_hero(float y0, float dt, int focused) {
     /* buttons */
     float by = y0 + HERO_H - 66;
     /* description: only as many lines as fit above the buttons */
-    int ov_lines = (int)((by - 10 - (y + 2)) / 20);
+    int ov_lines = (int)((by - 14 - (y + 2)) / 20);
     if (ov_lines > 2) ov_lines = 2;
-    if (t->overview && ov_lines > 0) text_wrap(F_REG, 14, x, y + 16, 460, 20, ov_lines, col_a(T->text2, ta * 0.9f), t->overview);
+    if (t->overview && ov_lines > 0) {
+        /* never under the buttons, whatever the font does */
+        gfx_clip(0, y, SCR_W, by - 8 - y);
+        text_wrap(F_REG, 14, x, y + 16, 460, 20, ov_lines, col_a(T->text2, ta * 0.9f), t->overview);
+        gfx_noclip();
+    }
 
     char lab[64];
     if (t->resume >= 0 && t->kind != KIND_MOVIE) {
@@ -686,9 +693,9 @@ static void draw_home(float dt) {
         sy_t = clampf(sy_t, 0, maxs);
         if (!in.touching) sy = approach(sy, sy_t, S.ambient ? 6 : 10, dt);
     }
-    draw_hero(roundf(-sy * 0.85f), dt, frow == 0);
+    draw_hero(roundf(-sy), dt, frow == 0); /* moves with the shelves: nothing slides over its buttons */
     /* the hero gently dims away as the shelves scroll up */
-    float hero_bottom = HERO_H - sy * 0.85f;
+    float hero_bottom = HERO_H - sy;
     if (sy > 1 && hero_bottom > 0) gfx_rect(0, 0, SCR_W, hero_bottom, col_a(T->bg, clampf(sy / 200.0f, 0, 1)));
     draw_rows(dt);
 }
@@ -850,8 +857,28 @@ static void draw_secret_locked(float dt) {
 
 /* ---------------- frame ---------------- */
 
+static void music_intro_cb(int c, void *ud) {
+    (void)ud;
+    db_seti("seen_music_intro", 1);
+    if (c == 1) {
+        set_tab(TAB_MUSIC);
+        frow = 0;
+    }
+}
+
 void main_frame(float dt) {
     tab_anim = approach(tab_anim, 1, 10, dt);
+    {
+        static int asked;
+        if (!asked && !modal_active() && g_time > 1.5f) {
+            asked = 1;
+            if (!db_geti("seen_music_intro", 0))
+                modal_confirm("New: Music",
+                              "Nest plays your music now. Put songs in ux0:music and open the Music tab: albums, artists, "
+                              "playlists, an equaliser, and it keeps playing with the screen off.",
+                              "Open Music", "Later", music_intro_cb, NULL);
+        }
+    }
     if (g_completed_tid >= 0 && !modal_active()) {
         Title *t = lib_title_by_id(g_completed_tid);
         g_completed_tid = -1;
