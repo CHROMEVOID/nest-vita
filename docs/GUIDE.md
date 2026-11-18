@@ -113,7 +113,7 @@ Nest has a **Music** tab, with playlists, albums, artists, songs, search and a p
 
 **Now Playing:** L / R skip, SQUARE pauses, TRIANGLE opens the queue, START has the song options, and **SELECT turns the screen off** while the music keeps going (any button wakes it). The volume slider goes past 100% for quiet songs. There's a sleep timer too.
 
-**Spotify playlists:** run **Nest Music** on your PC (in Nest-PC-Tools.zip), paste a playlist link, and it finds those songs in your music folder and makes a Nest playlist with the real cover. It can also fix album, artist, track numbers, years and covers in your song tags, so albums play in the right order.
+**Spotify, YouTube and SoundCloud playlists:** run **Nest Music** on your PC (in Nest-PC-Tools.zip), paste a playlist or album link, and it finds those songs in your music folder and makes a Nest playlist with the real cover. It can also fix album, artist, track numbers, years and covers in your song tags, so albums play in the right order.
 
 ---
 
@@ -137,7 +137,7 @@ All in **Nest-PC-Tools.zip** (Windows, need Python 3; double-click the `.bat`):
 | Tool | What it's for |
 |---|---|
 | **Nest Metadata** | Posters, logos, backdrops and descriptions from TMDB for a whole folder. |
-| **Nest Music** | Turns Spotify playlist links into Nest playlists (with covers), and fixes album / artist / track info in your songs. No account needed. |
+| **Nest Music** | Turns Spotify, YouTube and SoundCloud playlist links into Nest playlists (with covers), and fixes album / artist / track info in your songs. No account needed. |
 | **Nest PC Server** | Share a PC folder so Nest can stream it over Wi-Fi. |
 | **Nest Finder** | Point it at a folder or memory card to find hidden, oddly-named and *deleted* files (it can read deleted entries straight off an exFAT card and recover them to another drive). Move, delete, unhide or search them. Deep scans need "Run as administrator". |
 

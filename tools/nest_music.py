@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Nest Music: gets your music ready for Nest on the PS Vita.
 
-1. Spotify playlist -> Nest playlist
-   Paste a Spotify playlist link. Nest Music finds those songs in your music
-   folder and writes Playlists/<name>.m3u8 plus the playlist's cover picture,
-   so it shows up in Nest's Music tab with its real artwork.
+1. Spotify / YouTube / SoundCloud playlist -> Nest playlist
+   Paste a playlist (or album) link. Nest Music finds those songs in your
+   music folder and writes Playlists/<name>.m3u8 plus the playlist's cover
+   picture, so it shows up in Nest's Music tab with its real artwork.
+   YouTube and SoundCloud work best with yt-dlp installed (py -m pip install yt-dlp):
+   then every song comes through, not just the first 100 / first few.
 
 2. Fix album and artist info
    Looks every song up (Deezer, free, no account) and fills in the right
@@ -13,7 +15,7 @@
    that numbered them by playlist position.
 
 Double-click "Nest Music.bat", or:
-    py nest_music.py playlist <spotify link or Exportify .csv> --music <folder>
+    py nest_music.py playlist <Spotify / YouTube / SoundCloud link, or an Exportify .csv> --music <folder>
     py nest_music.py fix <folder> [--yes] [--dry-run]
 
 Playlists with more than 100 songs: make a free app at
@@ -251,7 +253,15 @@ def scan_music(folder):
 
 
 def match(track, songs, by_title):
-    """Find the local file for a playlist song. Title must match; then artist and length decide."""
+    """Find the local file for a playlist song; videos that put the song first are tried both ways."""
+    s = match_one(track, songs, by_title)
+    if s is None and track.get("artist"):
+        s = match_one({**track, "title": track["artist"], "artist": track["title"]}, songs, by_title)
+    return s
+
+
+def match_one(track, songs, by_title):
+    """Title must match; then artist and length decide."""
     t = norm(track["title"])
     arts = artist_set(track["artist"])
     cands = by_title.get(t, [])
@@ -317,16 +327,22 @@ def from_web_api(pid, keys):
     return meta.get("name") or "Playlist", desc, cover, tracks
 
 
-def from_embed(pid):
-    html = http(f"https://open.spotify.com/embed/playlist/{pid}").decode("utf-8", "replace")
+def from_embed(pid, kind="playlist"):
+    html = http(f"https://open.spotify.com/embed/{kind}/{pid}").decode("utf-8", "replace")
     m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.S)
     if not m:
         raise RuntimeError("Spotify's page didn't have the playlist in it. Is the playlist public?")
     e = json.loads(m.group(1))["props"]["pageProps"]["state"]["data"]["entity"]
-    tracks = [{"title": t.get("title", ""), "artist": t.get("subtitle", "").replace(" ", " "), "album": "",
+    tracks = [{"title": t.get("title", ""), "artist": t.get("subtitle", "").replace(" ", " "), "album": e.get("name", "") if kind == "album" else "",
                "dur": t.get("duration", 0)} for t in e.get("trackList", []) if t.get("title")]
     srcs = (e.get("coverArt") or {}).get("sources") or []
     cover = max(srcs, key=lambda s: s.get("width") or 0)["url"] if srcs else None
+    if not cover:
+        try:
+            o = http_json("https://open.spotify.com/oembed?url=" + urllib.parse.quote(f"https://open.spotify.com/{kind}/{pid}"))
+            cover = o.get("thumbnail_url")
+        except Exception:
+            pass
     return e.get("name") or e.get("title") or "Playlist", "", cover, tracks
 
 
@@ -345,12 +361,185 @@ def from_csv(path):
     return os.path.splitext(os.path.basename(path))[0], "", None, tracks
 
 
+def resolve_short(src):
+    """spotify.link / spoti.fi / on.soundcloud.com / youtu.be: follow them to the real page."""
+    host = urllib.parse.urlparse(src if "://" in src else "https://" + src).netloc.lower()
+    if not any(h in host for h in ("spotify.link", "spoti.fi", "on.soundcloud.com", "goo.gl", "app.link")):
+        return src
+    try:
+        req = urllib.request.Request(src if "://" in src else "https://" + src, headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            final, body = r.geturl(), r.read(400000).decode("utf-8", "replace")
+        if "open.spotify.com" in final or "soundcloud.com" in final and "on.soundcloud" not in final:
+            return final
+        m = re.search(r"https://open\.spotify\.com/[a-z-]*/?(playlist|album)/[A-Za-z0-9]+", body)
+        if m:
+            return m.group(0)
+    except Exception:
+        pass
+    return src
+
+
+def ytdlp_cmd():
+    """yt-dlp, if it's on this PC (as a program or a Python package)."""
+    import shutil
+    exe = shutil.which("yt-dlp")
+    if exe:
+        return [exe]
+    try:
+        import importlib.util
+        if importlib.util.find_spec("yt_dlp"):
+            return [sys.executable, "-m", "yt_dlp"]
+    except Exception:
+        pass
+    return None
+
+
+def ytdlp_json(url, flat=True):
+    cmd = ytdlp_cmd()
+    if not cmd:
+        return None
+    args = cmd + ["-J", "--no-warnings", "--ignore-errors", "--skip-download"] + (["--flat-playlist"] if flat else []) + [url]
+    try:
+        r = subprocess.run(args, capture_output=True, timeout=900, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        out = r.stdout.decode("utf-8", "replace").strip()
+        return json.loads(out) if out.startswith("{") else None
+    except Exception:
+        return None
+
+
+JUNK_VIDEO = re.compile(r"\s*[\(\[](?:official|lyric|lyrics|audio|video|visuali[sz]er|music video|mv|hd|hq|4k|explicit|clean|"
+                        r"full song|color coded|with lyrics|official audio|official video|official music video)[^\)\]]*[\)\]]", re.I)
+
+
+def split_video_title(title, channel):
+    """'Artist - Song (Official Video)' -> (Song, Artist); otherwise the channel is the artist."""
+    t = JUNK_VIDEO.sub("", title or "")
+    t = re.sub(r"\s*\|.*$", "", t)  # "Song | Album 2020"
+    t = re.sub(r"\s+(official\s+(music\s+)?(video|audio)|lyric\s+video|lyrics|music\s+video|visuali[sz]er)\s*$", "", t, flags=re.I)
+    t = t.replace("\u2013", "-").replace("\u2014", "-").strip()
+    ch = re.sub(r"\s*-\s*Topic$|VEVO$|\s*Official$|\s*Music$", "", (channel or "").strip(), flags=re.I).strip()
+    m = re.match(r"^(.+?)\s+[-~]\s+(.+)$", t)
+    if m:
+        artist, song = m.group(1).strip(), m.group(2).strip()
+    else:
+        artist, song = ch, t
+    song = song.strip(' "\'')
+    return song, artist
+
+
+def from_youtube(url):
+    m = re.search(r"[?&]list=([A-Za-z0-9_-]+)", url)
+    if not m:
+        raise RuntimeError("That YouTube link isn't a playlist (it needs list=... in it).")
+    url = "https://www.youtube.com/playlist?list=" + m.group(1)
+    d = ytdlp_json(url)
+    if d and d.get("entries"):
+        tracks = []
+        for e in d["entries"]:
+            if not e or not e.get("title") or e.get("title") in ("[Private video]", "[Deleted video]"):
+                continue
+            song, artist = split_video_title(e["title"], e.get("channel") or e.get("uploader"))
+            tracks.append({"title": song, "artist": artist, "album": "", "dur": int((e.get("duration") or 0) * 1000)})
+        thumbs = d.get("thumbnails") or []
+        cover = None
+        if thumbs:
+            cover = max(thumbs, key=lambda t: (t.get("width") or 0) * (t.get("height") or 0) or (t.get("preference") or 0)).get("url")
+        if not cover and d["entries"] and d["entries"][0].get("id"):
+            cover = f"https://i.ytimg.com/vi/{d['entries'][0]['id']}/hqdefault.jpg"
+        return d.get("title") or "YouTube playlist", d.get("description") or "", cover, tracks
+    # no yt-dlp: read the public page (the first 100 videos)
+    html = http(url, headers={"Accept-Language": "en-US,en"}).decode("utf-8", "replace")
+    mm = re.search(r"var ytInitialData = (\{.*?\});</script>", html, re.S)
+    if not mm:
+        raise RuntimeError("YouTube didn't show that playlist. Is it public or unlisted?")
+    data = json.loads(mm.group(1))
+    found = []
+
+    def walk(o):
+        if isinstance(o, dict):
+            lv = o.get("lockupViewModel")
+            if isinstance(lv, dict) and lv.get("contentType") == "LOCKUP_CONTENT_TYPE_VIDEO":
+                title = (((lv.get("metadata") or {}).get("lockupMetadataViewModel") or {}).get("title") or {}).get("content")
+                if title:
+                    found.append((lv.get("contentId"), title))
+            pv = o.get("playlistVideoRenderer")
+            if isinstance(pv, dict):
+                title = ((pv.get("title") or {}).get("runs") or [{}])[0].get("text")
+                ch = ((pv.get("shortBylineText") or {}).get("runs") or [{}])[0].get("text")
+                if title:
+                    found.append((pv.get("videoId"), title, ch, int(pv.get("lengthSeconds") or 0)))
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+    walk(data)
+    tracks = []
+    for f in found:
+        song, artist = split_video_title(f[1], f[2] if len(f) > 2 else "")
+        tracks.append({"title": song, "artist": artist, "album": "", "dur": (f[3] * 1000) if len(f) > 3 else 0})
+    name = re.search(r'"title":"([^"]+)","description"', html)
+    name = json.loads('"' + name.group(1) + '"') if name else "YouTube playlist"
+    cover = f"https://i.ytimg.com/vi/{found[0][0]}/hqdefault.jpg" if found and found[0][0] else None
+    if len(tracks) >= 100:
+        print("  YouTube's page shows the first 100 videos. Install yt-dlp (py -m pip install yt-dlp) for the rest.")
+    return name, "", cover, tracks
+
+
+def from_soundcloud(url):
+    url = url.split("?")[0]
+    if "/sets/" not in url:
+        raise RuntimeError("That SoundCloud link isn't a playlist (it needs /sets/ in it).")
+    name, cover, tracks, total = "SoundCloud playlist", None, [], 0
+    try:
+        html = http(url).decode("utf-8", "replace")
+        m = re.search(r"window\.__sc_hydration = (\[.*?\]);</script>", html, re.S)
+        for x in json.loads(m.group(1)) if m else []:
+            if x.get("hydratable") == "playlist":
+                pl = x["data"]
+                name = pl.get("title") or name
+                art = pl.get("artwork_url") or ((pl.get("tracks") or [{}])[0].get("artwork_url"))
+                cover = art.replace("-large.", "-t500x500.") if art else None
+                total = pl.get("track_count") or len(pl.get("tracks") or [])
+                for t in pl.get("tracks") or []:
+                    if t.get("title"):
+                        song, artist = split_video_title(t["title"], (t.get("user") or {}).get("username"))
+                        tracks.append({"title": song, "artist": artist, "album": "", "dur": t.get("duration") or 0})
+    except Exception as e:
+        print(f"  (SoundCloud page: {e})")
+    if total and len(tracks) < total:
+        print(f"  SoundCloud only shows {len(tracks)} of {total} songs on the page; asking yt-dlp for the rest (takes a moment) ...")
+        d = ytdlp_json(url, flat=False)
+        if d and d.get("entries"):
+            tracks = []
+            for e in d["entries"]:
+                if e and e.get("title"):
+                    song, artist = split_video_title(e["title"], e.get("uploader"))
+                    tracks.append({"title": song, "artist": artist, "album": "", "dur": int((e.get("duration") or 0) * 1000)})
+            name = d.get("title") or name
+        elif not ytdlp_cmd():
+            print("  Install yt-dlp (py -m pip install yt-dlp) to get every song from SoundCloud playlists.")
+    if not tracks:
+        raise RuntimeError("Couldn't read that SoundCloud playlist. Is it public?")
+    return name, "", cover, tracks
+
+
 def get_playlist(src):
     if os.path.isfile(src) and src.lower().endswith(".csv"):
         return from_csv(src)
+    src = resolve_short(src.strip())
+    low = src.lower()
+    if "youtube.com" in low or "youtu.be" in low:
+        return from_youtube(src)
+    if "soundcloud.com" in low:
+        return from_soundcloud(src)
+    am = re.search(r"album[/:]([A-Za-z0-9]{10,})", src)
+    if am:  # a Spotify album works too
+        return from_embed(am.group(1), "album")
     pid = playlist_id(src)
     if not pid:
-        raise RuntimeError("That doesn't look like a Spotify playlist link (open.spotify.com/playlist/...).")
+        raise RuntimeError("That doesn't look like a playlist link (Spotify, YouTube or SoundCloud).")
     keys = spotify_keys()
     if keys:
         try:
@@ -668,6 +857,11 @@ def main():
     p2.add_argument("--yes", action="store_true")
     p2.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
+    for stream in (sys.stdout, sys.stderr):  # song names in any language: never crash printing them
+        try:
+            stream.reconfigure(errors="replace")
+        except Exception:
+            pass
     if not need_mutagen():
         return 1
     try:
@@ -694,7 +888,7 @@ def main():
                 if c == "3":
                     songs = scan_music(music)  # read the fixed tags
             if c in ("1", "3"):
-                print("\nPaste Spotify playlist links (or a path to an Exportify .csv), one per line. Empty line when done.")
+                print("\nPaste playlist links (Spotify, YouTube or SoundCloud, or an Exportify .csv), one per line. Empty line when done.")
                 while True:
                     src = ask("link> ")
                     if not src:
