@@ -33,6 +33,8 @@ static int mk_cr;          /* credits: ms before the end */
 static int intro_vis;      /* "Skip intro" is showing */
 static float intro_a;
 static void shows_prefs_load(int tid);
+static void set_volume(int pct);
+static void volume_save(void);
 
 static int eidx = -1;
 static int ask;              /* showing the resume prompt */

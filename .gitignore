@@ -8,3 +8,6 @@ tools/tmdb_key.txt
 tools/nest_pc_server.json
 *.lnk
 *.log
+tools/spotify_keys.txt
+tools/nest_music_cache.json
+tools/*.bak

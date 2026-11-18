@@ -4,6 +4,10 @@ They need Python 3 from https://www.python.org/downloads/ (tick "Add python.exe 
   Nest Metadata.bat   Posters, logos, backdrops and descriptions from TMDB for a whole folder.
                       Needs a free TMDB API key (themoviedb.org > Settings > API). It asks once
                       and saves it only on this PC (tmdb_key.txt next to this file).
+  Nest Music.bat      Paste a Spotify playlist link: it finds those songs in your music folder and
+                      writes a Nest playlist with the real cover (Playlists/ folder). It also fixes
+                      album, artist, track numbers, years and covers in your song tags, so albums
+                      play in the right order. No account needed (free Deezer lookups).
   Nest PC Server.bat  Lets Nest on your Vita play videos from a folder on this PC over Wi-Fi.
                       Nest > Settings > Library > Watch from your PC, then type the address shown.
   Nest Finder.bat     Finds hidden, oddly named and deleted files on a folder or memory card,
