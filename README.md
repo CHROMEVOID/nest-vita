@@ -31,6 +31,8 @@ That's **Nest**. Put your shows, movies and manga on the memory card, and it qui
 
 🔒 **A private section.** There's a **Secret** tab with a PIN for your more… *personal* "shows". It stays tucked away from the rest of the app. We don't judge, and we definitely don't peek.
 
+🎧 **Music, too.** A Music tab with albums, artists, playlists, shuffle, a queue and a sleep timer. It keeps playing while you browse, and with the screen off. There's a little PC app that turns your Spotify playlists into Nest ones, covers and all.
+
 📖 **It reads, too.** Manga, comics, PDFs and ePubs. Right-to-left for manga, two pages side by side, and one long scroll for webtoons. Perfect for "one more chapter" turning into six.
 
 ⏭️ **The small, nice things.**

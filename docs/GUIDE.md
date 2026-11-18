@@ -92,11 +92,28 @@ Downloads posters, backdrops, logos and descriptions from TMDB for a whole folde
 1. Install [Python 3](https://www.python.org/downloads/) (tick **"Add python.exe to PATH"**).
 2. Get a **free TMDB API key**: make an account at [themoviedb.org](https://www.themoviedb.org/signup) → *Settings → API → Create → Developer*. Copy the **API Key** (or the long *Read Access Token*).
 3. Download **`Nest-PC-Tools.zip`** from the [release](https://github.com/CHROMEVOID/nest-vita/releases/latest), unzip it, and double-click **`Nest Metadata.bat`**. Paste your key once (it's saved only on your PC, in `tools/tmdb_key.txt`).
-4. Drag your video folder onto the window (or onto the `.bat`). It writes `poster.jpg`, `fanart.jpg`, `logo.png` and `nest.json` next to your files and never overwrites anything you already have.
+4. Pick your video folder. It writes `poster.jpg`, `fanart.jpg`, `logo.png` and `nest.json` (with every episode's real name) next to your files, plus each season folder's own poster. It only ever swaps in something *better* than what's there.
+   - Not sure which film you meant? It shows the top matches and lets you pick. Matches are remembered, so the next run is instant.
+   - Still wrong? Put `{tmdb-12345}` in the folder name (the number from the TMDB page) and run it again.
+   - Anything it couldn't find is listed in `Nest Metadata - not found.txt`.
 5. Copy the folder to your Vita (or **Settings → Library → Rescan everything**).
 
 ### 3. By hand
 Drop a `poster.jpg` (and optionally `fanart.jpg`, `logo.png`) into a show's or movie's folder, or name it after a loose file: `Night Train (2019)-poster.jpg`. You can also choose any image on the card from **⋯ → Choose poster image…**.
+
+---
+
+## Music
+
+Nest has a **Music** tab, with playlists, albums, artists, songs, search and a proper Now Playing screen.
+
+1. Put your music in **`ux0:music`** (or any folder you've added to Nest). MP3, FLAC, OGG, M4A and WAV all work.
+2. Open **Music**. Nest reads the tags (and the cover art inside the files) and sorts everything into albums and artists. Songs with no tags are worked out from the file and folder names, track numbers included (`03 - Song.mp3`, `1-04 Song.flac`, `Artist - Album (2004)/...`).
+3. Pick something. It keeps playing while you browse, and the little bar at the bottom takes you back to it.
+
+**Now Playing:** L / R skip, SQUARE pauses, TRIANGLE opens the queue, START has the song options, and **SELECT turns the screen off** while the music keeps going (any button wakes it). The volume slider goes past 100% for quiet songs. There's a sleep timer too.
+
+**Spotify playlists:** run **Nest Music** on your PC (in Nest-PC-Tools.zip), paste a playlist link, and it finds those songs in your music folder and makes a Nest playlist with the real cover. It can also fix album, artist, track numbers, years and covers in your song tags, so albums play in the right order.
 
 ---
 
@@ -120,6 +137,7 @@ All in **Nest-PC-Tools.zip** (Windows, need Python 3; double-click the `.bat`):
 | Tool | What it's for |
 |---|---|
 | **Nest Metadata** | Posters, logos, backdrops and descriptions from TMDB for a whole folder. |
+| **Nest Music** | Turns Spotify playlist links into Nest playlists (with covers), and fixes album / artist / track info in your songs. No account needed. |
 | **Nest PC Server** | Share a PC folder so Nest can stream it over Wi-Fi. |
 | **Nest Finder** | Point it at a folder or memory card to find hidden, oddly-named and *deleted* files (it can read deleted entries straight off an exFAT card and recover them to another drive). Move, delete, unhide or search them. Deep scans need "Run as administrator". |
 
