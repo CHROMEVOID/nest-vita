@@ -624,15 +624,11 @@ void music_scan_start(void) {
         while (s && sqlite3_step(s) == SQLITE_ROW) add_root_ex(col(s, 0), 1);
         if (s) sqlite3_finalize(s);
     }
-    /* the usual music folders, then every library folder you've added (not private ones) */
+    /* the usual music folders. Film and show folders are never searched for music:
+       big video libraries made the music search crawl (and look like it found nothing) */
     const char *usual[] = {"ux0:music", "ux0:Music", "ux0:mp3", "ux0:data/Nest/music", "uma0:music", "uma0:Music",
                            "imc0:music", "xmc0:music", "grw0:music", "ur0:music"};
     for (int i = 0; i < 10; i++) add_root(usual[i]);
-    static char paths[32][512];
-    int sec[32];
-    int nf = db_folders(paths, sec, NULL, 32);
-    for (int i = 0; i < nf; i++)
-        if (!sec[i] && !net_is_url(paths[i])) add_root(paths[i]);
     /* snapshot of what's known */
     for (int i = 0; i < nknown; i++) free(known_path[i]);
     free(known_path);
