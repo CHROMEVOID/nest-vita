@@ -6,6 +6,7 @@
 
 #include <sqlite3.h>
 #include <psp2/io/stat.h>
+#include <psp2/io/dirent.h>
 
 sqlite3 *db_handle(void);
 
