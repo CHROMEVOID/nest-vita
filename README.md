@@ -31,7 +31,9 @@ That's **Nest**. Put your shows, movies and manga on the memory card, and it qui
 
 🔒 **A private section.** There's a **Secret** tab with a PIN for your more… *personal* "shows". It stays tucked away from the rest of the app. We don't judge, and we definitely don't peek.
 
-🎧 **Music, too.** A Music tab with albums, artists, playlists, shuffle, a queue and a sleep timer. It keeps playing while you browse, and with the screen off. There's a little PC app that turns your Spotify playlists into Nest ones, covers and all.
+🎧 **Music, too.** A Music tab that sorts your songs into albums and artists by itself (yes, even `01 - track (official audio) [320kbps].mp3`). Playlists, shuffle, a queue, a sleep timer, an equaliser with presets, and **lyrics that scroll along with the song** if your files have them. It keeps playing while you browse, and with the screen off.
+
+🎶 **Your playlists come with you.** A little PC app called **Nest Music** takes a **Spotify, YouTube or SoundCloud** playlist link, finds those songs in your music folder and makes a Nest playlist with the real cover. It can tidy up album names and track numbers too, so albums play in the right order.
 
 📖 **It reads, too.** Manga, comics, PDFs and ePubs. Right-to-left for manga, two pages side by side, and one long scroll for webtoons. Perfect for "one more chapter" turning into six.
 
@@ -56,7 +58,8 @@ That's **Nest**. Put your shows, movies and manga on the memory card, and it qui
 
 1. Download **[Nest.vpk](https://github.com/CHROMEVOID/nest-vita/releases/latest)** and install it with **VitaShell**. You'll need a homebrew-enabled Vita; [vita.hacks.guide](https://vita.hacks.guide) walks you through it, and it's easier than it sounds.
 2. Open Nest, pick the folder your videos are in, and let it look around while you grab a snack.
-3. *(Optional, but you'll be glad you did)* Get **Nest-PC-Tools.zip** from the same page, open **Nest Metadata**, and drag your folder in. That's what gives you the posters and logos in the screenshots.
+3. *(Optional, but you'll be glad you did)* Get **Nest-PC-Tools.zip** from the same page, open **Nest Metadata**, and pick your video folder. That's what gives you the posters, logos and episode names in the screenshots.
+4. *(For music)* Put your songs in `ux0:music`, or pick any folder from **Music → Folders**. **Nest Music** in the same zip brings your Spotify, YouTube and SoundCloud playlists over.
 
 **One small catch:** the Vita only plays **MP4 (H.264 + AAC)**. That's been Sony's rule since 2011, so take it up with them. The [guide](docs/GUIDE.md#getting-your-videos-ready) has the one HandBrake setting that sorts it out.
 
