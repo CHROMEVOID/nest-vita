@@ -78,7 +78,8 @@ enum {
     IC_PLAY, IC_PAUSE, IC_SEARCH, IC_GEAR, IC_LOCK, IC_UNLOCK, IC_HEART, IC_HEART_FILL, IC_STAR, IC_STAR_FILL,
     IC_BACK, IC_PLUS, IC_CHECK, IC_HOME, IC_FILM, IC_TV, IC_BOOK, IC_NEXT, IC_PREV, IC_REW, IC_FWD, IC_VOLUME,
     IC_SUBS, IC_SPEED, IC_FOLDER, IC_INFO, IC_CLOSE, IC_CHEVRON_R, IC_CHEVRON_L, IC_CHEVRON_D, IC_GRID, IC_CHART,
-    IC_CALENDAR, IC_SPARK, IC_DOTS, IC_EYE_OFF, IC_REFRESH, IC_TRASH, IC_PENCIL, IC_IMAGE, IC_MOON, IC_DROP
+    IC_CALENDAR, IC_SPARK, IC_DOTS, IC_EYE_OFF, IC_REFRESH, IC_TRASH, IC_PENCIL, IC_IMAGE, IC_MOON, IC_DROP,
+    IC_SHUFFLE, IC_REPEAT, IC_NOTE, IC_QUEUE, IC_TIMER, IC_SCREEN_OFF, IC_MIC
 };
 void icon(int id, float cx, float cy, float s, col_t c);
 
@@ -149,6 +150,9 @@ int netf_read(NetFile *f, uint8_t *dst, uint64_t pos, uint32_t len);
 uint64_t netf_size(NetFile *f);
 void netf_close(NetFile *f);
 void net_avplayer_files(void *replacement); /* fills a SceAvPlayerFileReplacement */
+
+/* boost.c: volume past 100% through a clean limiter */
+void boost_apply(int16_t *buf, int frames, int ch, float gain, float *state);
 
 /* ---------------- media.c ---------------- */
 float media_aspect(const char *path); /* display shape from the MP4 header, 0 if unknown */
@@ -319,7 +323,7 @@ float poster_w(void);
 /* ---------------- app / navigation (main.c) ---------------- */
 enum {
     SCR_ONBOARD, SCR_MAIN, SCR_DETAIL, SCR_PLAYER, SCR_READER, SCR_SEARCH, SCR_SETTINGS, SCR_STATS,
-    SCR_PICKER, SCR_PIN, SCR_SCAN, SCR_SPOTLIGHT, SCR_HISTORY, SCR_STORAGE, SCR_COUNT
+    SCR_PICKER, SCR_PIN, SCR_SCAN, SCR_SPOTLIGHT, SCR_HISTORY, SCR_STORAGE, SCR_MPAGE, SCR_NOWPLAYING, SCR_COUNT
 };
 void nav_push(int scr);
 void nav_pop(void);

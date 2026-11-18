@@ -1,6 +1,7 @@
 /* Nest -- a calm media library for PlayStation Vita.
    Main loop, navigation with soft cross-fades, settings and UI sounds. */
 #include "nest.h"
+#include "music.h"
 
 #include <psp2/audioout.h>
 #include <psp2/power.h>
@@ -231,6 +232,8 @@ static void frame_for(int scr, float dt) {
     case SCR_SPOTLIGHT: spotlight_frame(dt); break;
     case SCR_HISTORY: history_frame(dt); break;
     case SCR_STORAGE: storage_frame(dt); break;
+    case SCR_MPAGE: mpage_frame(dt); break;
+    case SCR_NOWPLAYING: nowplaying_frame(dt); break;
     }
 }
 
@@ -273,6 +276,7 @@ int main(void) {
     gfx_frame_begin();
     img_init();
     lib_load();
+    music_init();
     /* a library on the PC needs the network up before anything loads from it */
     for (int i = 0; i < L.ne; i++)
         if (net_is_url(L.e[i].path)) { net_up(); break; }
@@ -298,6 +302,12 @@ int main(void) {
         g_time += dt;
 
         input_update(dt);
+        /* screen turned off for music: any button or touch wakes it, and does nothing else */
+        if (mus_screen_is_off() && (in.pressed || in.touching)) {
+            mus_screen_wake();
+            in.pressed = in.repeat = 0;
+            in.tap = in.double_tap = in.long_press = 0;
+        }
         /* keep the screen awake while watching or reading */
         int top = nav_top();
         if (top == SCR_PLAYER || top == SCR_READER || top == SCR_SCAN) sceKernelPowerTick(SCE_KERNEL_POWER_TICK_DEFAULT);
@@ -318,7 +328,7 @@ int main(void) {
         {
             /* ambient sound: menus and reading only, never over a video */
             int top_a = nav_top();
-            g_ambient_kind = (top_a == SCR_PLAYER || top_a == SCR_PIN) ? 0 : S.ambient_sound;
+            g_ambient_kind = (top_a == SCR_PLAYER || top_a == SCR_PIN || mus_playing()) ? 0 : S.ambient_sound;
         }
         vita2d_start_drawing();
         vita2d_clear_screen();
@@ -338,6 +348,8 @@ int main(void) {
             in.tap = in.long_press = 0;
         }
         metafind_frame(dt);
+        music_frame(dt);
+        miniplayer_draw(dt, nav_top());
         modal_frame(dt);
         draw_toasts(dt);
 

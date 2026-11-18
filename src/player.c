@@ -1,6 +1,7 @@
 /* Video player on the Vita's hardware decoder (MP4 / H.264 + AAC).
    Soft fading controls, double-tap seeking, external subtitles, Up Next. */
 #include "nest.h"
+#include "music.h"
 
 #include <malloc.h>
 #include <psp2/avplayer.h>
@@ -19,6 +20,8 @@ static SceAvPlayerHandle av;
 static int av_ready, av_started;
 static volatile int audio_run;
 static volatile int audio_vol = 32768;
+static volatile int audio_gain = 256; /* software gain above 100%, 256 = 1.0x */
+static int16_t gain_buf[1024 * 2];
 static SceUID audio_th = -1;
 static vita2d_texture *vtex[2];
 static SceAvPlayerFrameInfo vframe[2];
@@ -49,6 +52,7 @@ static int scrubbing;
 static float scrub_pos;
 static float tap_ripple_t = -1, tap_ripple_x, tap_ripple_y;
 static int vol_pct = 100;
+static int vol_edit, vol_drag; /* the volume slider is open / being dragged */
 static int pending_restart, pending_stop;
 /* diagnostics shown if a video fails, so a screenshot says why */
 static int diag_init, diag_src, diag_cdram_kb, diag_main_kb, diag_frames;
@@ -207,6 +211,7 @@ static int audio_thread(SceSize a, void *arg) {
     int cur_vol = -1, cur_rate = 48000, cur_ch = 2;
     SceAvPlayerFrameInfo fr;
     memset(&fr, 0, sizeof(fr));
+    float lim_state = 1;
     while (audio_run) {
         if (cur_vol != audio_vol) {
             int v[2] = {audio_vol, audio_vol};
@@ -220,7 +225,15 @@ static int audio_thread(SceSize a, void *arg) {
                 cur_rate = rate;
                 cur_ch = ch;
             }
-            sceAudioOutOutput(port, fr.pData);
+            void *out = fr.pData;
+            int g = audio_gain;
+            if (g != 256) { /* boost through the limiter: loud, never crackly */
+                int nch = ch == 1 ? 1 : 2;
+                memcpy(gain_buf, fr.pData, 1024 * nch * sizeof(int16_t));
+                boost_apply(gain_buf, 1024, nch, g / 256.0f, &lim_state);
+                out = gain_buf;
+            }
+            sceAudioOutOutput(port, out);
         } else {
             sceKernelDelayThread(1000);
         }
@@ -310,6 +323,7 @@ void player_open(int e, int allow_ask) {
     /* give the hardware decoder as much memory as possible */
     img_flush();
     lofi_release_all();
+    mus_pause(); /* music stops for a video */
     int restart = 0;
     if (av_started) {
         save_progress(1);
@@ -333,6 +347,9 @@ void player_open(int e, int allow_ask) {
     jump_to = 0;
     scrubbing = 0;
     subs_load(en->path);
+    set_volume(db_geti("player_vol", 100));
+    vol_flash = 0;
+    vol_edit = vol_drag = 0;
     shows_prefs_load(L.t[en->tidx].id);
     ask = allow_ask && S.resume_ask && !en->finished && en->pos > 30000;
     ask_focus = 0;
@@ -349,6 +366,7 @@ void player_open(int e, int allow_ask) {
 
 void player_close(void) {
     pending_restart = pending_stop = 0;
+    volume_save();
     save_progress(1);
     av_stop();
     subs_free();
@@ -404,11 +422,19 @@ static void go_prev(void) {
     if (pv >= 0 && L.e[pv].playable) player_open(pv, 0);
 }
 
+#define VOL_MAX 200
 static void set_volume(int pct) {
-    vol_pct = clampi(pct, 0, 100);
-    audio_vol = 32768 * vol_pct / 100;
+    vol_pct = clampi(pct, 0, VOL_MAX);
+    if (vol_pct <= 100) {
+        audio_vol = 32768 * vol_pct / 100;
+        audio_gain = 256;
+    } else { /* past 100%: hardware at full, the rest is software boost */
+        audio_vol = 32768;
+        audio_gain = 256 * vol_pct / 100;
+    }
     vol_flash = 1;
 }
+static void volume_save(void) { db_seti("player_vol", vol_pct); }
 
 static const int SPEEDS[] = {100, 200, 400};
 static const char *SPEED_LABEL[] = {"1\xc3\x97", "2\xc3\x97", "4\xc3\x97"};
@@ -497,7 +523,7 @@ static void button_action(int b) {
         if (av_ready) sceAvPlayerSetTrickSpeed(av, SPEEDS[speed_i]);
         toast(speed_i ? "Fast forward (sound mutes above 1\xc3\x97)" : "Normal speed");
         break;
-    case 7: set_volume(vol_pct >= 100 ? 0 : vol_pct + 25); break;
+    case 7: vol_edit = !vol_edit; vol_flash = 1; if (!vol_edit) volume_save(); break;
     case 8: cycle_fit(); break;
     }
 }
@@ -654,6 +680,15 @@ void player_frame(float dt) {
     }
     ui_timer += dt;
     int visible = !S.focus_mode && (ui_timer < 3.5f || paused);
+    if (vol_edit) { /* the slider has the d-pad until it's closed */
+        ui_timer = 0;
+        if (in.repeat & (B_UP | B_RIGHT)) set_volume(vol_pct + 5);
+        if (in.repeat & (B_DOWN | B_LEFT)) set_volume(vol_pct - 5);
+        if (in.pressed & (B_OK | B_BACK)) { vol_edit = 0; volume_save(); }
+        vol_flash = 1;
+        in.repeat = 0;
+        in.pressed &= ~(B_OK | B_BACK | B_SQR);
+    }
     if (in.pressed & B_BACK) {
         sfx(2);
         nav_pop();
@@ -686,8 +721,8 @@ void player_frame(float dt) {
     } else {
         if (in.repeat & B_LEFT) seek_by(-10);
         if (in.repeat & B_RIGHT) seek_by(10);
-        if (in.repeat & B_UP) set_volume(vol_pct + 10);
-        if (in.repeat & B_DOWN) set_volume(vol_pct - 10);
+        if (in.repeat & B_UP) { set_volume(vol_pct + 10); volume_save(); }
+        if (in.repeat & B_DOWN) { set_volume(vol_pct - 10); volume_save(); }
         if (in.pressed & B_OK) {
             ui_timer = 0;
             if (S.focus_mode) toggle_pause();
@@ -701,6 +736,18 @@ void player_frame(float dt) {
         if (intro_vis) { sceAvPlayerJumpToTime(av, (uint64_t)mk_ie); intro_vis = 0; seek_flash = 1; seek_dir = 1; }
         else seek_by(30);
     }
+    /* touch: the volume slider, while it's on screen */
+    float vs_x = SCR_W - 64, vs_y = 116, vs_h = 250;
+    int vol_shown = vol_edit || vol_flash > 0.3f;
+    if (in.touching && (vol_drag || (vol_shown && in.sx > vs_x - 34 && in.sx < vs_x + 50 && in.sy > vs_y - 20 && in.sy < vs_y + vs_h + 20))) {
+        vol_drag = 1;
+        int pct = (int)roundf((1 - clampf((in.ty - vs_y) / vs_h, 0, 1)) * VOL_MAX / 5) * 5;
+        if (pct != vol_pct) set_volume(pct);
+        vol_flash = 1;
+        ui_timer = 0;
+    }
+    if (vol_drag && !in.touching) { vol_drag = 0; volume_save(); in.tap = in.double_tap = 0; }
+    if (vol_drag) in.tap = in.double_tap = 0;
     /* touch: double tap zones, single tap toggles controls */
     float bar_y = SCR_H - 92;
     if (in.double_tap) {
@@ -778,12 +825,31 @@ void player_frame(float dt) {
         if (k >= 1) tap_ripple_t = -1;
         else gfx_ring(tap_ripple_x, tap_ripple_y, 20 + 60 * ease_out(k), 2, col_a(0xFFFFFFFF, 0.5f * (1 - k)));
     }
-    vol_flash = approach(vol_flash, 0, 2.5f, dt);
-    if (vol_flash > 0.02f) {
-        float x = SCR_W - 56, y = 140, h = 220;
-        gfx_rrect(x, y, 16, h, 8, col_a(0xFF000000, 0.45f * vol_flash));
-        gfx_rrect(x, y + h * (1 - vol_pct / 100.0f), 16, h * vol_pct / 100.0f, 8, col_a(0xFFFFFFFF, 0.9f * vol_flash));
-        icon(IC_VOLUME, x + 8, y + h + 22, 18, col_a(0xFFFFFFFF, vol_flash));
+    if (!vol_edit && !vol_drag) vol_flash = approach(vol_flash, 0, 1.6f, dt);
+    if (vol_flash > 0.02f) { /* volume slider: 0-100% normal, 100-200% boost */
+        float a = clampf(vol_flash * 1.6f, 0, 1);
+        float x = vs_x, y = vs_y, h = vs_h, w = 16;
+        float k = (float)vol_pct / VOL_MAX, mid = y + h * 0.5f;
+        gfx_shadow(x - 22, y - 46, w + 44, h + 92, 22, 18, col_a(0xFF000000, 0.35f * a));
+        gfx_rrect(x - 22, y - 46, w + 44, h + 92, 22, col_a(0xFF0E0E12, 0.72f * a));
+        gfx_rrect(x, y, w, h, w / 2, col_a(0xFFFFFFFF, 0.18f * a));
+        float fy = y + h * (1 - k);
+        if (vol_pct > 100) { /* boost part glows in the accent colour */
+            gfx_rrect(x, fy, w, mid - fy + w / 2, w / 2, col_a(T->accent, a));
+            gfx_rrect(x, mid, w, y + h - mid, w / 2, col_a(0xFFFFFFFF, 0.92f * a));
+        } else if (vol_pct > 0) {
+            gfx_rrect(x, fy, w, y + h - fy, w / 2, col_a(0xFFFFFFFF, 0.92f * a));
+        }
+        gfx_rect(x - 5, mid - 1, w + 10, 2, col_a(0xFFFFFFFF, 0.55f * a)); /* the 100% line */
+        gfx_circle(x + w / 2, fy, vol_edit || vol_drag ? 12 : 10, col_a(0xFFFFFFFF, a));
+        if (vol_edit || vol_drag) gfx_ring(x + w / 2, fy, 15, 2, col_a(T->accent, a));
+        char vl[16];
+        snprintf(vl, sizeof(vl), "%d%%", vol_pct);
+        text_center(F_SEMI, 14, x + w / 2, y - 18, col_a(vol_pct > 100 ? T->accent : 0xFFFFFFFF, a), vl);
+        icon(vol_pct == 0 ? IC_VOLUME : IC_VOLUME, x + w / 2, y + h + 24, 18, col_a(0xFFFFFFFF, 0.9f * a));
+        if (vol_pct == 0) gfx_line(x + w / 2 - 10, y + h + 34, x + w / 2 + 10, y + h + 14, 2, col_a(0xFFFFFFFF, a));
+        if (vol_pct > 100) text_center(F_META, 9, x + w / 2, y + h + 46, col_a(T->accent, 0.9f * a), "BOOST");
+        if (vol_edit) text_right(F_META, 11, x - 34, y + h / 2 + 4, col_a(0xFFFFFFFF, 0.6f * a), "Up / Down to change");
     }
 
     /* ---------- Up Next ---------- */

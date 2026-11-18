@@ -1,11 +1,12 @@
 /* The main screen: navigation, cinematic hero, shelves, browse grids and the
    Secret tab. */
 #include "nest.h"
+#include "music.h"
 
 extern int g_completed_tid;
 
-enum { TAB_HOME, TAB_MOVIES, TAB_SHOWS, TAB_BOOKS, TAB_SECRET, TAB_COUNT };
-static const char *TAB_NAMES[TAB_COUNT] = {"Home", "Movies", "Shows", "Books", "Secret"};
+enum { TAB_HOME, TAB_MOVIES, TAB_SHOWS, TAB_BOOKS, TAB_MUSIC, TAB_SECRET, TAB_COUNT };
+static const char *TAB_NAMES[TAB_COUNT] = {"Home", "Movies", "Shows", "Books", "Music", "Secret"};
 
 enum { ROW_HERO, ROW_POSTER, ROW_WIDE, ROW_ACTION };
 #define MAXROWS 14
@@ -208,6 +209,7 @@ static void build_grid(void) {
 void main_enter(void) {
     build_rows();
     if (tab >= TAB_MOVIES && tab <= TAB_BOOKS) build_grid();
+    if (tab == TAB_MUSIC) music_tab_enter();
 }
 
 static void set_tab(int t) {
@@ -223,6 +225,7 @@ static void set_tab(int t) {
     if (frow >= 0) frow = 0;
     hero_i = 0;
     if (tab == TAB_HOME || tab == TAB_SECRET) build_rows();
+    else if (tab == TAB_MUSIC) music_tab_enter();
     else build_grid();
     sfx(0);
 }
@@ -277,7 +280,7 @@ static void draw_nav(float dt, float alpha) {
     float ix[2] = {SCR_W - 92, SCR_W - 48};
     int ics[2] = {IC_SEARCH, IC_GEAR};
     for (int i = 0; i < 2; i++) {
-        int focused = frow == -1 && nav_i == 5 + i;
+        int focused = frow == -1 && nav_i == TAB_COUNT + i;
         if (focused) gfx_circle(ix[i], 35, 19, col_a(T->text, 0.92f));
         else gfx_circle(ix[i], 35, 19, col_a(T->light ? 0xFF000000 : 0xFFFFFFFF, 0.06f));
         icon(ics[i], ix[i], 35, 19, focused ? T->bg : col_a(T->text, alpha));
@@ -858,16 +861,20 @@ void main_frame(float dt) {
     if (in.pressed & B_L) set_tab((tab + TAB_COUNT - 1) % TAB_COUNT);
     if (in.pressed & B_R) set_tab((tab + 1) % TAB_COUNT);
     if (in.pressed & B_START) { settings_enter(); return; }
-    if (in.pressed & B_SELECT) { search_enter(); return; }
+    if (in.pressed & B_SELECT) {
+        if (tab == TAB_MUSIC && mus_active()) nowplaying_open();
+        else search_enter();
+        return;
+    }
 
     /* navigation bar focus */
     if (frow == -1) {
         if (in.repeat & B_LEFT && nav_i > 0) nav_i--, sfx(0);
-        if (in.repeat & B_RIGHT && nav_i < 6) nav_i++, sfx(0);
+        if (in.repeat & B_RIGHT && nav_i < TAB_COUNT + 1) nav_i++, sfx(0);
         if (in.pressed & B_OK) {
             sfx(1);
             if (nav_i < TAB_COUNT) set_tab(nav_i);
-            else if (nav_i == 5) search_enter();
+            else if (nav_i == TAB_COUNT) search_enter();
             else settings_enter();
             if (nav_i < TAB_COUNT) frow = 0;
         }
@@ -885,7 +892,11 @@ void main_frame(float dt) {
     float slide = (1 - ease_out(tab_anim)) * 18;
     (void)slide;
     if (tab == TAB_HOME) draw_home(dt);
-    else if (tab == TAB_SECRET) {
+    else if (tab == TAB_MUSIC) {
+        int want_nav = 0;
+        music_tab_frame(dt, frow != -1 && !modal_active(), &want_nav);
+        if (want_nav) { frow = -1; nav_i = tab; sfx(0); }
+    } else if (tab == TAB_SECRET) {
         if (g_secret_unlocked) draw_home(dt);
         else draw_secret_locked(dt);
     } else draw_grid(dt);
@@ -896,7 +907,7 @@ void main_frame(float dt) {
         static const char *hints[] = {"OK", "Open", "TRI", "Options", "L", "R", "SELECT", "Search"};
         (void)hints;
         static const char *h2[] = {"OK", "Open", "TRI", "Options", "SQR", "Favorite"};
-        if (tab != TAB_SECRET || g_secret_unlocked) {
+        if ((tab != TAB_SECRET || g_secret_unlocked) && tab != TAB_MUSIC && !miniplayer_height()) {
             float a = (tab == TAB_HOME || tab == TAB_SECRET) ? clampf(sy / 80.0f, 0, 1) : 1;
             if (a > 0.05f) {
                 gfx_grad_v(0, SCR_H - 46, SCR_W, 46, col_a(T->bg, 0), col_a(T->bg, 0.9f * a));

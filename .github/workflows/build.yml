@@ -11,6 +11,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Title cleaner tests
         run: cc -O1 -Wall -I src tests/test_parse.c src/parse.c -o test_parse && ./test_parse
+      - name: Music tag tests
+        run: cc -O1 -Wall -I src tests/test_mtags.c src/mtags.c -o test_mtags && ./test_mtags
       - name: Scanner tests
         run: cc -O1 -Wall -I src tests/test_scan.c src/scan.c src/parse.c -o test_scan && ./test_scan /tmp/nestlib
 

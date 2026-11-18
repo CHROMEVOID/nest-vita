@@ -691,6 +691,70 @@ void icon(int id, float cx, float cy, float s, col_t c) {
         L(15.5f, 12, 19, 16);
         gfx_circle(X(15.5f), Y(8.8f), 1.5f * k, c);
         break;
+    case IC_SHUFFLE: /* two crossing arrows */
+        L(4, 7, 8, 7);
+        L(8, 7, 15, 17);
+        L(15, 17, 20, 17);
+        L(4, 17, 8, 17);
+        L(8, 17, 10.5f, 13.4f);
+        L(12.5f, 10.6f, 15, 7);
+        L(15, 7, 20, 7);
+        L(17.5f, 4.5f, 20, 7);
+        L(17.5f, 9.5f, 20, 7);
+        L(17.5f, 14.5f, 20, 17);
+        L(17.5f, 19.5f, 20, 17);
+        break;
+    case IC_REPEAT: /* a loop with an arrow */
+        L(5, 11, 5, 8.5f);
+        L(5, 8.5f, 7, 6.5f);
+        L(7, 6.5f, 19, 6.5f);
+        L(16.5f, 4, 19, 6.5f);
+        L(16.5f, 9, 19, 6.5f);
+        L(19, 13, 19, 15.5f);
+        L(19, 15.5f, 17, 17.5f);
+        L(17, 17.5f, 5, 17.5f);
+        L(7.5f, 15, 5, 17.5f);
+        L(7.5f, 20, 5, 17.5f);
+        break;
+    case IC_NOTE: /* a quaver */
+        gfx_circle(X(8.5f), Y(17), 3.4f * k, c);
+        gfx_circle(X(17), Y(15), 3.4f * k, c);
+        L(11.6f, 17, 11.6f, 5.5f);
+        L(20.1f, 15, 20.1f, 3.5f);
+        L(11.6f, 5.5f, 20.1f, 3.5f);
+        L(11.6f, 8.5f, 20.1f, 6.5f);
+        break;
+    case IC_QUEUE: /* lines with a little play mark */
+        L(4, 6, 15, 6);
+        L(4, 11, 15, 11);
+        L(4, 16, 11, 16);
+        {
+            vita2d_color_vertex *v = cverts(3);
+            if (v) {
+                v[0] = (vita2d_color_vertex){X(15), Y(13), 0.5f, c};
+                v[1] = (vita2d_color_vertex){X(15), Y(20), 0.5f, c};
+                v[2] = (vita2d_color_vertex){X(20.5f), Y(16.5f), 0.5f, c};
+                vita2d_draw_array(SCE_GXM_PRIMITIVE_TRIANGLES, v, 3);
+            }
+        }
+        break;
+    case IC_TIMER: /* a little clock */
+        gfx_ring(cx, Y(13), 8 * k, t, c);
+        L(12, 13, 12, 8.5f);
+        L(12, 13, 15, 15);
+        L(10, 2.8f, 14, 2.8f);
+        break;
+    case IC_SCREEN_OFF: /* a screen with a moon */
+        gfx_rrect_outline(X(3), Y(5), 18 * k, 12 * k, 2 * k, t, c);
+        L(9, 20, 15, 20);
+        gfx_circle(X(12), Y(11), 3.2f * k, c);
+        break;
+    case IC_MIC:
+        gfx_rrect_outline(X(9), Y(3), 6 * k, 11 * k, 3 * k, t, c);
+        L(6, 11, 6, 12);
+        L(18, 11, 18, 12);
+        L(12, 17.5f, 12, 21);
+        break;
     case IC_MOON:
         gfx_circle(cx, cy, 8 * k, c);
         break;
