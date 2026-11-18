@@ -192,7 +192,7 @@ int dec_read(Dec *d, int16_t *out, int frames) {
                 if (d->av_done) break;
                 int c = fr.details.audio.channelCount;
                 if (c < 1 || c > 2) c = 2;
-                to_stereo_s16(fr.pData, c, 1024, d->avbuf);
+                to_stereo_s16((const int16_t *)fr.pData, c, 1024, d->avbuf);
                 d->avn = 1024;
                 d->avp = 0;
                 d->ch = 2;
