@@ -324,6 +324,36 @@ void db_read_meta(const char *path, char **overview, char **genres, float *score
     free(j);
 }
 
+/* nest.json "episodes": {"S01E02": "Episode name", ...} written by Nest Metadata */
+static char *meta_text(const char *path) {
+    if (!path || net_is_url(path)) return NULL;
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (n <= 0 || n > 1024 * 1024) { fclose(f); return NULL; }
+    char *j = malloc(n + 1);
+    if (j && fread(j, 1, n, f) != (size_t)n) { free(j); j = NULL; }
+    if (j) j[n] = 0;
+    fclose(f);
+    return j;
+}
+static int meta_episode(const char *j, int season, int number, char *out, int n) {
+    if (!j || number <= 0) return 0;
+    const char *eps = strstr(j, "\"episodes\"");
+    if (!eps) return 0;
+    char k[24];
+    snprintf(k, sizeof(k), "\"S%02dE%02d\"", season > 0 ? season : 1, number);
+    const char *p = strstr(eps, k);
+    if (!p) return 0;
+    p += strlen(k);
+    while (*p == ' ' || *p == ':' || *p == '	') p++;
+    if (*p != '"') return 0;
+    json_str(p, out, n);
+    return out[0] != 0;
+}
+
 int db_import(ScanResult *r, const char *folder) {
     if (!db) return -1;
     db_exec("BEGIN");
@@ -383,8 +413,14 @@ int db_import(ScanResult *r, const char *folder) {
         sqlite3_bind_text(getid, 1, t->key, -1, SQLITE_STATIC);
         if (sqlite3_step(getid) != SQLITE_ROW) continue;
         int tid = sqlite3_column_int(getid, 0);
+        char *mj = t->kind == KIND_SERIES ? meta_text(t->meta) : NULL;
         for (int k = 0; k < t->ne; k++) {
             ScanEntry *e = &t->e[k];
+            char epn[200];
+            if (mj && meta_episode(mj, e->season, e->number, epn, sizeof(epn))) {
+                free(e->name);
+                e->name = strdup(epn);
+            }
             sqlite3_reset(ins);
             sqlite3_bind_int(ins, 1, tid);
             sqlite3_bind_int(ins, 2, e->season);
@@ -409,6 +445,7 @@ int db_import(ScanResult *r, const char *folder) {
             sqlite3_bind_double(ins, 10, asp);
             sqlite3_step(ins);
         }
+        free(mj);
     }
     sqlite3_finalize(up);
     sqlite3_finalize(getid);

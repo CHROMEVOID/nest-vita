@@ -479,6 +479,19 @@ static void handle_videos(Walk *w, const char *dir, int depth, DList *l) {
                                  find_file_art(dir, l, de->name, "-backdrop", tmp, sizeof(tmp))))
                 t->backdrop = xstrdup(tmp);
             if (!t->logo && find_file_art(dir, l, de->name, "-logo", tmp, sizeof(tmp))) t->logo = xstrdup(tmp);
+            if (!t->meta) { /* "<movie>.json" from Nest Metadata, for movies sharing a folder */
+                char want[300];
+                snprintf(want, sizeof(want), "%s", de->name);
+                char *dot = strrchr(want, '.');
+                if (dot) *dot = 0;
+                strncat(want, ".json", sizeof(want) - strlen(want) - 1);
+                for (int k = 0; k < l->n; k++)
+                    if (!l->v[k].is_dir && !strcasecmp(l->v[k].name, want)) {
+                        path_join(dir, l->v[k].name, tmp, sizeof(tmp));
+                        t->meta = xstrdup(tmp);
+                        break;
+                    }
+            }
             if (owns_folder) set_art(t, &w->art[depth < 16 ? depth : 15], NULL);
         }
     }
