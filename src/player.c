@@ -356,7 +356,7 @@ void player_open(int e, int allow_ask) {
     ask = allow_ask && S.resume_ask && !en->finished && en->pos > 30000;
     ask_focus = 0;
     if (!ask) {
-        if (allow_ask && !en->finished && en->pos > 30000) jump_to = en->pos;
+        if (allow_ask && !en->finished && en->pos > 30000) jump_to = en->pos - 3000; /* a few seconds back, so you don't miss a line */
         pending_restart = 1; /* start on the player's first frame, after any thumbnail work has stopped */
         (void)restart;
     } else if (restart) {
@@ -394,12 +394,16 @@ static void seek_by(int sec) {
     sceAvPlayerJumpToTime(av, (uint64_t)t);
     seek_flash = 1;
     seek_dir = sec;
+    if (save_timer < 2.4f) save_timer = 2.4f; /* remember the new spot straight after */
 }
 
 static void toggle_pause(void) {
     if (!av_ready) return;
     paused = !paused;
-    if (paused) sceAvPlayerPause(av);
+    if (paused) {
+        sceAvPlayerPause(av);
+        save_progress(0); /* pausing is often the last thing before switching off */
+    }
     else sceAvPlayerResume(av);
     play_flash = 1;
 }
@@ -424,15 +428,19 @@ static void go_prev(void) {
     if (pv >= 0 && L.e[pv].playable) player_open(pv, 0);
 }
 
-#define VOL_MAX 200
+#define VOL_MAX 300
 static void set_volume(int pct) {
     vol_pct = clampi(pct, 0, VOL_MAX);
-    if (vol_pct <= 100) {
-        audio_vol = 32768 * vol_pct / 100;
+    /* 100% is a touch louder than the Vita's own maximum (x1.2), and the top end
+       reaches x3.6: the hardware does what it can, software does the rest, and
+       the limiter keeps it clean */
+    float eff = vol_pct * 1.2f / 100.0f;
+    if (eff <= 1.0f) {
+        audio_vol = (int)(32768 * eff);
         audio_gain = 256;
-    } else { /* past 100%: hardware at full, the rest is software boost */
+    } else {
         audio_vol = 32768;
-        audio_gain = 256 * vol_pct / 100;
+        audio_gain = (int)(256 * eff);
     }
     vol_flash = 1;
 }
@@ -561,7 +569,7 @@ static void draw_resume_prompt(float dt) {
         return;
     }
     if (choose >= 0) {
-        jump_to = choose == 0 ? (uint64_t)e->pos : 0;
+        jump_to = choose == 0 ? (uint64_t)(e->pos > 3000 ? e->pos - 3000 : e->pos) : 0;
         ask = 0;
         av_start();
     }
@@ -775,7 +783,7 @@ void player_frame(float dt) {
 
     /* periodic save */
     save_timer += dt;
-    if (save_timer > 10) {
+    if (save_timer > 3) { /* every few seconds: switching off never loses more than that */
         save_timer = 0;
         save_progress(0);
     }
@@ -828,10 +836,10 @@ void player_frame(float dt) {
         else gfx_ring(tap_ripple_x, tap_ripple_y, 20 + 60 * ease_out(k), 2, col_a(0xFFFFFFFF, 0.5f * (1 - k)));
     }
     if (!vol_edit && !vol_drag) vol_flash = approach(vol_flash, 0, 1.6f, dt);
-    if (vol_flash > 0.02f) { /* volume slider: 0-100% normal, 100-200% boost */
+    if (vol_flash > 0.02f) { /* volume slider: 0-100% normal, 100-300% boost */
         float a = clampf(vol_flash * 1.6f, 0, 1);
         float x = vs_x, y = vs_y, h = vs_h, w = 16;
-        float k = (float)vol_pct / VOL_MAX, mid = y + h * 0.5f;
+        float k = (float)vol_pct / VOL_MAX, mid = y + h * (1 - 100.0f / VOL_MAX);
         gfx_shadow(x - 22, y - 46, w + 44, h + 92, 22, 18, col_a(0xFF000000, 0.35f * a));
         gfx_rrect(x - 22, y - 46, w + 44, h + 92, 22, col_a(0xFF0E0E12, 0.72f * a));
         gfx_rrect(x, y, w, h, w / 2, col_a(0xFFFFFFFF, 0.18f * a));

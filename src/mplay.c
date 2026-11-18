@@ -3,6 +3,8 @@
    with the screen off, or with Nest in the background. */
 #include "nest.h"
 #include "music.h"
+#include <sqlite3.h>
+sqlite3 *db_handle(void);
 
 #include <psp2/audioout.h>
 #include <psp2/appmgr.h>
@@ -505,13 +507,17 @@ void mus_queue_move(int from, int to) {
 }
 
 void mus_set_volume(int pct) {
-    vol_pct = clampi(pct, 0, 200);
-    if (vol_pct <= 100) {
-        vol_hw = 32768 * vol_pct / 100;
+    vol_pct = clampi(pct, 0, 300);
+    /* 100% is a touch louder than the Vita's own maximum (x1.2), and the top end
+       reaches x3.6: the hardware does what it can, software does the rest, and
+       the limiter keeps it clean */
+    float eff = vol_pct * 1.2f / 100.0f;
+    if (eff <= 1.0f) {
+        vol_hw = (int)(32768 * eff);
         vol_gain = 256;
     } else {
         vol_hw = 32768;
-        vol_gain = 256 * vol_pct / 100;
+        vol_gain = (int)(256 * eff);
     }
 }
 int mus_volume(void) { return vol_pct; }
@@ -617,4 +623,99 @@ void mus_remap_end(void) {
     }
     g_mus_started_track = -1;
     unlock();
+}
+
+/* ---------------- remembering where you were ---------------- */
+
+static int saved_qn = -1, saved_qhash;
+static float state_t;
+
+static int queue_hash(void) {
+    unsigned h = 2166136261u;
+    for (int i = 0; i < qn; i++) h = (h ^ (unsigned)qord[i]) * 16777619u;
+    return (int)(h ^ (unsigned)qn);
+}
+
+static void save_state(void) {
+    if (qn <= 0 || qi < 0 || qi >= qn) return;
+    sqlite3 *db = db_handle();
+    if (!db) return;
+    int h = queue_hash();
+    if (qn != saved_qn || h != saved_qhash) { /* the queue itself changed: write it out */
+        db_exec("BEGIN; CREATE TABLE IF NOT EXISTS mqueue(pos INT PRIMARY KEY, path TEXT); DELETE FROM mqueue;");
+        sqlite3_stmt *s = NULL;
+        sqlite3_prepare_v2(db, "INSERT INTO mqueue(pos, path) VALUES(?, ?)", -1, &s, NULL);
+        for (int i = 0; s && i < qn; i++) {
+            if (qord[i] < 0 || qord[i] >= M.nt) continue;
+            sqlite3_reset(s);
+            sqlite3_bind_int(s, 1, i);
+            sqlite3_bind_text(s, 2, M.t[qord[i]].path, -1, SQLITE_STATIC);
+            sqlite3_step(s);
+        }
+        if (s) sqlite3_finalize(s);
+        db_exec("COMMIT");
+        saved_qn = qn;
+        saved_qhash = h;
+    }
+    char v[300];
+    snprintf(v, sizeof(v), "%d,%d,%d,%d,%s", qi, mus_pos_ms(), from_kind, from_idx, from_label);
+    db_set("mus_state", v);
+}
+
+void mus_state_tick(float dt) {
+    static int was_playing;
+    int p = mus_playing();
+    state_t += dt;
+    /* every 5 s while playing, and right away on pause */
+    if ((p && state_t > 5) || (was_playing && !p)) {
+        state_t = 0;
+        save_state();
+    }
+    was_playing = p;
+}
+
+void mus_state_restore(void) {
+    const char *v = db_get("mus_state", NULL);
+    if (!v || !M.nt) return;
+    int sqi = 0, spos = 0, fk = 0, fi = 0;
+    char label[200] = "";
+    if (sscanf(v, "%d,%d,%d,%d,%199[^\n]", &sqi, &spos, &fk, &fi, label) < 4) return;
+    sqlite3 *db = db_handle();
+    sqlite3_stmt *s = NULL;
+    if (sqlite3_prepare_v2(db, "SELECT path FROM mqueue ORDER BY pos", -1, &s, NULL) != SQLITE_OK) return;
+    /* path -> song */
+    int n = 0, cap = 256;
+    int *list = malloc(sizeof(int) * cap);
+    int cur = -1;
+    int row = 0;
+    while (list && sqlite3_step(s) == SQLITE_ROW) {
+        const char *pth = (const char *)sqlite3_column_text(s, 0);
+        int t = pth ? music_track_by_path(pth) : -1;
+        if (t >= 0) {
+            if (n == cap) { cap *= 2; list = realloc(list, sizeof(int) * cap); }
+            if (row == sqi) cur = n;
+            list[n++] = t;
+        }
+        row++;
+    }
+    sqlite3_finalize(s);
+    if (n > 0 && cur >= 0) {
+        ensure_thread();
+        lock();
+        q_reserve(n);
+        memcpy(qord, list, sizeof(int) * n);
+        memcpy(qbase, list, sizeof(int) * n);
+        qn = qbn = n;
+        qi = cur;
+        playing = 0;      /* ready, not blasting music at start-up */
+        want_load = 1;
+        want_seek = spos > 2000 ? spos - 2000 : 0;
+        unlock();
+        from_kind = fk;
+        from_idx = fi;
+        snprintf(from_label, sizeof(from_label), "%s", label);
+        saved_qn = qn;
+        saved_qhash = queue_hash();
+    }
+    free(list);
 }

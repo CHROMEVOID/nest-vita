@@ -64,6 +64,11 @@ void music_scan_start(void);     /* walk the folders in the background */
 void music_frame(float dt);      /* main loop: finish scans, save stats */
 int music_has_library(void);
 void music_reload(void);
+int music_track_by_path(const char *path); /* -1 if it isn't in the library */
+void music_add_root(const char *path);    /* a folder you picked for music */
+void music_remove_root(const char *path);
+int music_roots(char out[][512], int max); /* the folders you picked */
+int music_report(char lines[][160], int max); /* what the last scan looked at, for the empty screen */
 
 int music_search(const char *q, int *tracks, int *nt, int *albums, int *na, int *artists, int *nr, int max);
 void music_set_liked(int ti, int v);
@@ -114,6 +119,8 @@ int mus_sleep_left(void);        /* seconds, 0 none, -1 end of song */
 void mus_screen_off(void);
 int mus_screen_is_off(void);
 void mus_screen_wake(void);
+void mus_state_tick(float dt);   /* main loop: save where you are now and then */
+void mus_state_restore(void);    /* at start: back to the song and second you left
 
 /* ---- sound (dsp.c) ---- */
 #define EQ_BANDS 6

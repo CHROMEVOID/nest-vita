@@ -35,7 +35,7 @@ static int view_ids[8], nviews;
 static char view_names[8][64];
 static const char *SCENE_NAMES[20];
 
-enum { A_ADD, A_ADD_SECRET, A_RESCAN, A_HEALTH, A_STATS, A_PIN, A_LOCK, A_CLEAR, A_WHOLE, A_EXCL_ADD, A_CLEARLIB,
+enum { A_ADD, A_MUSIC, A_ADD_SECRET, A_RESCAN, A_HEALTH, A_STATS, A_PIN, A_LOCK, A_CLEAR, A_WHOLE, A_EXCL_ADD, A_CLEARLIB,
        A_HISTORY, A_STORAGE, A_PC,
        A_FOLDER = 100, A_EXCL = 200, A_VIEW = 300 };
 
@@ -90,6 +90,7 @@ static void build(void) {
             r->action = A_FOLDER + i;
         }
         add(R_ACTION, "Add a folder", "Films, shows, books and manga")->action = A_ADD;
+        add(R_ACTION, "Add a music folder", "Where your songs are: Nest sorts them into albums and artists")->action = A_MUSIC;
         add(R_ACTION, "Add a secret folder", "Kept behind your PIN")->action = A_ADD_SECRET;
         add(R_ACTION, "Scan the whole Vita", "Every memory card, minus system, game and app folders")->action = A_WHOLE;
         add(R_ACTION, "Watch from your PC (Wi-Fi)", "Run Nest PC Server on your computer, then type the address it shows")->action = A_PC;
@@ -338,6 +339,7 @@ static void act(int a) {
     }
     switch (a) {
     case A_ADD: picker_open(PICK_LIBRARY); break;
+    case A_MUSIC: picker_open(PICK_MUSIC); break;
     case A_ADD_SECRET:
         if (!db_get("pin_hash", NULL)) { pin_open(PIN_CREATE); toast("Set a PIN first"); }
         else picker_open(PICK_SECRET);

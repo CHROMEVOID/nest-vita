@@ -423,7 +423,9 @@ static int nplists, capplists;
 static char (*artist_imgs)[2][512];
 static int nartimg, capartimg;
 static char roots[24][512];
-static int roots_ok[24];
+static int roots_ok[24], roots_songs[24], roots_picked[24];
+static int rescan_after; /* a scan was asked for while one was running */
+static int last_nroots;
 static int nroots;
 static volatile int scan_done;
 static SceUID scan_th = -1;
@@ -559,6 +561,13 @@ static void walk(const char *dir, int depth) {
     for (int i = 0; i < d->n; i++) {
         if (!d->dir[i] || d->names[i][0] == '.') continue;
         if (!strcasecmp(d->names[i], "sce_sys") || !strcasecmp(d->names[i], "sce_pfs")) continue;
+        if (depth == 0 && strchr(dir, ':') && strchr(dir, ':')[1] == 0) { /* a whole card: skip the system's own folders */
+            static const char *sysd[] = {"app", "patch", "addcont", "appmeta", "license", "cache", "savedata", "theme", "user", "pspemu", "vitasdk", "tai", NULL};
+            int skip = 0;
+            for (int k = 0; sysd[k]; k++)
+                if (!strcasecmp(d->names[i], sysd[k])) skip = 1;
+            if (skip) continue;
+        }
         char sub[512];
         snprintf(sub, sizeof(sub), "%s/%s", dir, d->names[i]);
         if (!strncasecmp(sub, DATA_DIR, strlen(DATA_DIR)) && strncasecmp(sub, MUSIC_DIR, strlen(MUSIC_DIR))) continue;
@@ -572,29 +581,48 @@ static int scan_thread(SceSize a, void *p) {
     (void)p;
     for (int i = 0; i < nroots; i++) {
         SceIoStat st;
-        roots_ok[i] = sceIoGetstat(roots[i], &st) >= 0;
+        size_t rl = strlen(roots[i]);
+        int is_dev = rl && roots[i][rl - 1] == ':';
+        roots_ok[i] = is_dev ? 1 : sceIoGetstat(roots[i], &st) >= 0;
+        if (!roots_ok[i]) {
+            SceUID dd = sceIoDopen(roots[i]); /* some drivers can't stat a folder but can open it */
+            if (dd >= 0) { roots_ok[i] = 1; sceIoDclose(dd); }
+        }
+        int before = nfound;
         if (roots_ok[i]) walk(roots[i], 0);
+        roots_songs[i] = nfound - before;
     }
     scan_done = 1;
     return sceKernelExitDeleteThread(0);
 }
 
-static void add_root(const char *r) {
+static void add_root_ex(const char *r, int picked) {
     for (int i = 0; i < nroots; i++)
-        if (!strcasecmp(roots[i], r)) return;
+        if (!strcasecmp(roots[i], r)) { if (picked) roots_picked[i] = 1; return; }
     /* a folder inside one already listed is walked anyway */
     for (int i = 0; i < nroots; i++) {
         size_t l = strlen(roots[i]);
         if (!strncasecmp(roots[i], r, l) && r[l] == '/') return;
     }
-    if (nroots < 24) snprintf(roots[nroots++], 512, "%s", r);
+    if (nroots < 24) {
+        roots_picked[nroots] = picked;
+        roots_songs[nroots] = 0;
+        snprintf(roots[nroots++], 512, "%s", r);
+    }
 }
+static void add_root(const char *r) { add_root_ex(r, 0); }
 
 void music_scan_start(void) {
-    if (M.scanning) return;
+    if (M.scanning) { rescan_after = 1; return; }
     sceIoMkdir(MUSIC_DIR, 0777);
     sceIoMkdir(ART_DIR, 0777);
+    sceIoMkdir("ux0:music", 0777); /* so there's always an obvious place to put songs */
     nroots = 0;
+    { /* folders you picked come first */
+        sqlite3_stmt *s = q("SELECT v FROM settings WHERE k LIKE 'music_root:%'");
+        while (s && sqlite3_step(s) == SQLITE_ROW) add_root_ex(col(s, 0), 1);
+        if (s) sqlite3_finalize(s);
+    }
     /* the usual music folders, then every library folder you've added (not private ones) */
     const char *usual[] = {"ux0:music", "ux0:Music", "ux0:mp3", "ux0:data/Nest/music", "uma0:music", "uma0:Music",
                            "imc0:music", "xmc0:music", "grw0:music", "ur0:music"};
@@ -604,11 +632,6 @@ void music_scan_start(void) {
     int nf = db_folders(paths, sec, NULL, 32);
     for (int i = 0; i < nf; i++)
         if (!sec[i] && !net_is_url(paths[i])) add_root(paths[i]);
-    { /* extra folders chosen in Settings > Music */
-        sqlite3_stmt *s = q("SELECT v FROM settings WHERE k LIKE 'music_root:%'");
-        while (s && sqlite3_step(s) == SQLITE_ROW) add_root(col(s, 0));
-        if (s) sqlite3_finalize(s);
-    }
     /* snapshot of what's known */
     for (int i = 0; i < nknown; i++) free(known_path[i]);
     free(known_path);
@@ -878,7 +901,7 @@ static void scan_commit(void) {
 extern volatile int g_mus_started_track; /* set by the engine when a song begins */
 
 void music_frame(float dt) {
-    (void)dt;
+    mus_state_tick(dt);
     if (M.scanning && scan_done) {
         if (scan_th >= 0) {
             SceUInt to = 100000;
@@ -886,8 +909,13 @@ void music_frame(float dt) {
             scan_th = -1;
         }
         int before = M.nt;
+        last_nroots = nroots;
         scan_commit();
         M.scanning = 0;
+        if (rescan_after) {
+            rescan_after = 0;
+            music_scan_start();
+        }
         if (M.nt > before && before > 0) {
             char m[64];
             snprintf(m, sizeof(m), "%d new songs in Music", M.nt - before);
@@ -918,6 +946,7 @@ void music_init(void) {
     sceIoMkdir(MUSIC_DIR, 0777);
     sceIoMkdir(ART_DIR, 0777);
     music_reload();
+    mus_state_restore();
     music_scan_start(); /* quietly pick up new songs every launch */
 }
 
@@ -1129,3 +1158,58 @@ int music_recents(int *kinds, int *idx, int max) {
     if (s) sqlite3_finalize(s);
     return n;
 }
+
+/* ---------------- music folders you pick ---------------- */
+
+void music_add_root(const char *path) {
+    if (!path || !path[0]) return;
+    char k[600];
+    snprintf(k, sizeof(k), "music_root:%s", path);
+    db_set(k, path);
+    char m[160];
+    const char *b = strrchr(path, '/');
+    snprintf(m, sizeof(m), "Looking for music in %s" "\xe2\x80\xa6", b ? b + 1 : path);
+    toast(m);
+    music_scan_start();
+}
+
+void music_remove_root(const char *path) {
+    char sql[700];
+    sqlite3_stmt *s = q("DELETE FROM settings WHERE k = ?");
+    snprintf(sql, sizeof(sql), "music_root:%s", path);
+    if (s) {
+        sqlite3_bind_text(s, 1, sql, -1, SQLITE_STATIC);
+        sqlite3_step(s);
+        sqlite3_finalize(s);
+    }
+    /* its songs go too (unless another folder still covers them) */
+    s = q("DELETE FROM mtracks WHERE path LIKE ?");
+    snprintf(sql, sizeof(sql), "%s/%%", path);
+    if (s) {
+        sqlite3_bind_text(s, 1, sql, -1, SQLITE_STATIC);
+        sqlite3_step(s);
+        sqlite3_finalize(s);
+    }
+    music_reload();
+    music_scan_start();
+}
+
+int music_roots(char out[][512], int max) {
+    int n = 0;
+    sqlite3_stmt *s = q("SELECT v FROM settings WHERE k LIKE 'music_root:%' ORDER BY v");
+    while (s && sqlite3_step(s) == SQLITE_ROW && n < max) snprintf(out[n++], 512, "%s", col(s, 0));
+    if (s) sqlite3_finalize(s);
+    return n;
+}
+
+int music_report(char lines[][160], int max) {
+    int n = 0;
+    for (int i = 0; i < last_nroots && n < max; i++) {
+        if (!roots_ok[i] && !roots_picked[i]) continue; /* the usual places that just aren't there: not interesting */
+        if (!roots_ok[i]) snprintf(lines[n++], 160, "%s  \xc2\xb7  can't open this folder", roots[i]);
+        else snprintf(lines[n++], 160, "%s  \xc2\xb7  %d song%s", roots[i], roots_songs[i], roots_songs[i] == 1 ? "" : "s");
+    }
+    return n;
+}
+
+int music_track_by_path(const char *p) { return track_by_path(p); }

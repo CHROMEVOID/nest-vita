@@ -578,27 +578,66 @@ static void item_menu(int kind, int idx) {
 
 static void rescan(void) {
     music_scan_start();
-    toast("Looking for music\xe2\x80\xa6");
+    toast("Looking for new songs\xe2\x80\xa6");
+}
+
+/* ---- music folders: pick one like the films picker, look again, or forget one ---- */
+static char froots[16][512];
+static int nfroots;
+static void folders_cb(int c, void *ud) {
+    (void)ud;
+    if (c == 0) picker_open(PICK_MUSIC);
+    else if (c == 1) rescan();
+    else if (c >= 2 && c - 2 < nfroots) {
+        music_remove_root(froots[c - 2]);
+        toast("That folder is forgotten (the files stay on the card)");
+    }
+}
+static void folders_menu(void) {
+    static char lab[16][96];
+    static const char *items[18];
+    int n = 0;
+    items[n++] = "Add a music folder\xe2\x80\xa6";
+    items[n++] = "Look for new songs";
+    nfroots = music_roots(froots, 14);
+    for (int i = 0; i < nfroots; i++) {
+        const char *b = strrchr(froots[i], '/');
+        snprintf(lab[i], sizeof(lab[i]), "Forget %s", b ? b + 1 : froots[i]);
+        items[n++] = lab[i];
+    }
+    modal_menu("Music folders", items, n, folders_cb, NULL);
 }
 
 static void draw_empty(int focused, float top) {
     float cx = SCR_W / 2;
     gfx_circle(cx, top + 70, 44, col_a(T->text, 0.07f));
     icon(IC_NOTE, cx, top + 70, 40, T->text2);
-    text_center(F_DISPLAY, T->display_font == 2 ? 20 : 24, cx, top + 150, T->text, M.scanning ? "Looking for your music\xe2\x80\xa6" : "No music yet");
+    text_center(F_DISPLAY, T->display_font == 2 ? 20 : 24, cx, top + 150, T->text, M.scanning ? "Looking for your music\xe2\x80\xa6" : "No music found yet");
     if (M.scanning) {
-        char m[200];
-        snprintf(m, sizeof(m), "%d songs found so far", M.scan_found);
+        char m[300];
+        snprintf(m, sizeof(m), "%d song%s found so far", M.scan_found, M.scan_found == 1 ? "" : "s");
         text_center(F_REG, 14, cx, top + 178, T->text2, m);
-        draw_spinner(cx, top + 214, 12, T->text2);
+        text_ellipsis(F_META, 11, cx - 300, top + 200, 600, T->text3, M.scan_now);
+        draw_spinner(cx, top + 232, 12, T->text2);
         return;
     }
-    text_center(F_REG, 14, cx, top + 180, T->text2, "Put MP3, FLAC, OGG, M4A or WAV files in ux0:music (or any folder");
-    text_center(F_REG, 14, cx, top + 200, T->text2, "you've added to Nest). Albums and artists sort themselves out.");
-    text_center(F_REG, 13, cx, top + 226, T->text3, "Got Spotify playlists? The Nest Music PC app turns them into playlists here.");
-    float bw = 190, bx = cx - bw / 2, by = top + 250;
-    draw_button(bx, by, bw, 44, IC_REFRESH, "Look again", 1, focused && fr >= 0 ? 1 : 0);
-    if (hit(bx, by, bw, 44) || (focused && fr >= 0 && (in.pressed & B_OK))) rescan();
+    text_center(F_REG, 14, cx, top + 178, T->text2, "Pick the folder your songs are in, the same way you picked your films.");
+    text_center(F_REG, 13, cx, top + 198, T->text3, "MP3, FLAC, OGG, M4A and WAV. Folders inside it are searched too.");
+    /* where it looked, so nothing is a mystery */
+    char rep_[6][160];
+    int nr = music_report(rep_, 6);
+    for (int i = 0; i < nr; i++) text_center(F_META, 11, cx, top + 222 + i * 16, T->text3, rep_[i]);
+    float by = top + 232 + nr * 16;
+    float bw = 230, bw2 = 150, gap2 = 12, bx = cx - (bw + gap2 + bw2) / 2;
+    static int efocus;
+    if (focused && fr >= 0) {
+        if (in.repeat & B_LEFT) efocus = 0;
+        if (in.repeat & B_RIGHT) efocus = 1;
+    }
+    draw_button(bx, by, bw, 44, IC_FOLDER, "Choose music folder", 1, focused && fr >= 0 && efocus == 0 ? 1 : 0);
+    draw_button(bx + bw + gap2, by, bw2, 44, IC_REFRESH, "Look again", 0, focused && fr >= 0 && efocus == 1 ? 1 : 0);
+    if (hit(bx, by, bw, 44) || (focused && fr >= 0 && efocus == 0 && (in.pressed & B_OK))) picker_open(PICK_MUSIC);
+    if (hit(bx + bw + gap2, by, bw2, 44) || (focused && fr >= 0 && efocus == 1 && (in.pressed & B_OK))) rescan();
 }
 
 void music_tab_frame(float dt, int focused, int *want_nav) {
@@ -635,10 +674,16 @@ void music_tab_frame(float dt, int focused, int *want_nav) {
         }
         cx += w + 8;
     }
+    {
+        float w;
+        float f = focused && fr == -1 && fc == MV_COUNT ? 1 : 0;
+        draw_chip(cx + 6, chip_y, "Folders", 0, f, &w);
+        if (hit(cx + 6, chip_y, w, 30)) folders_menu();
+    }
     if (mv == MV_SONGS) {
         static const char *sorts[3] = {"Recently added", "Title", "Artist"};
         float w = text_w(F_SEMI, 13, sorts[ssort]) + 28, x = SCR_W - MG - w;
-        float f = focused && fr == -1 && fc == MV_COUNT ? 1 : 0;
+        float f = focused && fr == -1 && fc == MV_COUNT + 1 ? 1 : 0;
         draw_chip(x, chip_y, sorts[ssort], 0, f, NULL);
         icon(IC_CHEVRON_D, x - 12, chip_y + 15, 12, T->text3);
         if (hit(x, chip_y, w, 30)) { ssort = (ssort + 1) % 3; build_songs(); }
@@ -668,11 +713,12 @@ void music_tab_frame(float dt, int focused, int *want_nav) {
     if (focused) {
         int moved = 0;
         if (fr == -1) {
-            int maxc = MV_COUNT - 1 + (mv == MV_SONGS ? 1 : 0);
+            int maxc = MV_COUNT + (mv == MV_SONGS ? 1 : 0);
             if (in.repeat & B_LEFT && fc > 0) fc--, moved = 1;
             if (in.repeat & B_RIGHT && fc < maxc) fc++, moved = 1;
             if (in.pressed & B_OK) {
-                if (fc == MV_COUNT) { ssort = (ssort + 1) % 3; build_songs(); }
+                if (fc == MV_COUNT) folders_menu();
+                else if (fc == MV_COUNT + 1) { ssort = (ssort + 1) % 3; build_songs(); }
                 else {
                     set_mv(fc);
                     if (fc == MV_SEARCH) ime_request("Search music", sq, 60, search_typed, NULL);
@@ -1483,26 +1529,26 @@ void nowplaying_frame(float dt) {
         int v = mus_volume();
         if (!eq_open && !queue_open && in.touching && (vol_drag || (fabsf(in.sy - vy) < 20 && in.sx > bx0 - 12 && in.sx < bx0 + bw + 12))) {
             vol_drag = 1;
-            int nv = (int)roundf(clampf((in.tx - bx0) / bw, 0, 1) * 200 / 5) * 5;
+            int nv = (int)roundf(clampf((in.tx - bx0) / bw, 0, 1) * 300 / 5) * 5;
             if (nv != v) mus_set_volume(nv);
             nf = 3;
         }
         if (vol_drag && !in.touching) { vol_drag = 0; db_seti("music_vol", mus_volume()); }
         v = mus_volume();
-        float k = v / 200.0f;
+        float k = v / 300.0f, b1 = 1.0f / 3; /* 100% sits a third of the way along */
         gfx_rrect(bx0, vy - 2, bw, 4, 2, col_a(0xFFFFFFFF, 0.22f));
-        gfx_rrect(bx0 + bw * 0.5f, vy - 2, bw * 0.5f, 4, 2, col_a(T->accent, 0.18f)); /* the boost zone */
+        gfx_rrect(bx0 + bw * b1, vy - 2, bw * (1 - b1), 4, 2, col_a(T->accent, 0.18f)); /* the boost zone */
         if (v > 100) {
-            gfx_rrect(bx0, vy - 2, bw * 0.5f, 4, 2, 0xFFFFFFFF);
-            gfx_rrect(bx0 + bw * 0.5f, vy - 2, bw * (k - 0.5f), 4, 2, T->accent);
+            gfx_rrect(bx0, vy - 2, bw * b1, 4, 2, 0xFFFFFFFF);
+            gfx_rrect(bx0 + bw * b1, vy - 2, bw * (k - b1), 4, 2, T->accent);
         } else gfx_rrect(bx0, vy - 2, fmaxf(4, bw * k), 4, 2, 0xFFFFFFFF);
-        gfx_rect(bx0 + bw * 0.5f - 1, vy - 6, 2, 12, col_a(0xFFFFFFFF, 0.5f));
+        gfx_rect(bx0 + bw * b1 - 1, vy - 6, 2, 12, col_a(0xFFFFFFFF, 0.5f));
         gfx_circle(bx0 + bw * k, vy, f || vol_drag ? 8 : 6, 0xFFFFFFFF);
         if (f) gfx_ring(bx0 + bw * k, vy, 12, 2, T->accent);
         char vl[16];
         snprintf(vl, sizeof(vl), "%d%%", v);
         text_right(F_SEMI, 13, rx + rw, vy + 5, v > 100 ? T->accent : col_a(0xFFFFFFFF, 0.75f), vl);
-        if (v > 100) text_center(F_META, 9, bx0 + bw * 0.75f, vy - 10, col_a(T->accent, 0.8f), "BOOST");
+        if (v > 100) text_center(F_META, 9, bx0 + bw * (b1 + 1) / 2, vy - 10, col_a(T->accent, 0.8f), "BOOST");
     }
 
     /* little level bars under the cover */

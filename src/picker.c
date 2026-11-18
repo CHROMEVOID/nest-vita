@@ -1,5 +1,7 @@
 /* Folder / image picker that browses the Vita's storage devices. */
 #include "nest.h"
+#include "music.h"
+#include "mtags.h"
 
 #include <psp2/io/dirent.h>
 
@@ -17,7 +19,7 @@ static int purpose;
 static char path[512];       /* "" = device list */
 static PEnt *ents;
 static int nents, cap;
-static int focus, nvid, nbook;
+static int focus, nvid, nbook, nsong;
 static float psy, psy_t, pfsel;
 
 static const char *DEVICES[] = {"ux0:", "uma0:", "imc0:", "xmc0:", "grw0:", "ur0:"};
@@ -33,6 +35,7 @@ static void cb(void *ud, const char *name, int is_dir, long long size) {
     if (!is_dir) {
         if (m == MEDIA_VIDEO) nvid++;
         if (m == MEDIA_BOOK) nbook++;
+        if (mtags_is_audio(name)) nsong++;
         if (!image_mode() || m != MEDIA_IMAGE) return;
     }
     if (nents == cap) {
@@ -54,7 +57,7 @@ static int pcmp(const void *a, const void *b) {
 }
 
 static void list(void) {
-    nents = nvid = nbook = 0;
+    nents = nvid = nbook = nsong = 0;
     if (!path[0]) {
         for (int i = 0; i < 6; i++) {
             char p[16];
@@ -88,7 +91,7 @@ static void list(void) {
 
 void picker_open(int p) {
     purpose = p;
-    const char *last = db_get("last_pick", NULL);
+    const char *last = db_get(p == PICK_MUSIC ? "last_music_pick" : "last_pick", NULL);
     if (last && !image_mode() && fs_exists(last)) snprintf(path, sizeof(path), "%s", last);
     else path[0] = 0;
     list();
@@ -173,6 +176,13 @@ static void whole_cb(int choice, void *ud) {
 static void choose_target(const char *t) {
     if (!t || !t[0] || image_mode()) return;
     snprintf(g_scan_path, sizeof(g_scan_path), "%s", t);
+    if (purpose == PICK_MUSIC) {
+        db_set("last_music_pick", t);
+        music_add_root(t);
+        sfx(1);
+        nav_pop();
+        return;
+    }
     if (purpose == PICK_EXCLUDE) {
         db_add_exclude(t);
         toast("Nest will skip that folder from now on");
@@ -224,6 +234,7 @@ void picker_frame(float dt) {
     const char *title = image_mode() ? "Choose an image"
                         : purpose == PICK_SECRET ? "Choose a secret folder"
                         : purpose == PICK_EXCLUDE ? "Choose a folder to skip"
+                        : purpose == PICK_MUSIC ? "Choose your music folder"
                                                   : "Choose a folder";
     text(F_DISPLAY, T->display_font == 2 ? 20 : 25, 62, 47, T->text, title);
     text_ellipsis(F_META, 13, 62, 70, 560, T->text3, path[0] ? path : "Storage");
@@ -244,7 +255,10 @@ void picker_frame(float dt) {
             if (hit(SCR_W - 40 - cw - 10, 70, cw + 20, 26) || (in.pressed & B_START)) choose_target(target_path(1));
         }
         char found[64];
-        if ((nvid || nbook) && !(nents && ents[focus].dir)) {
+        if (purpose == PICK_MUSIC) {
+            snprintf(found, sizeof(found), nsong ? "%d song%s directly in here" : "Folders inside are searched too", nsong, nsong == 1 ? "" : "s");
+            if (!(nents && ents[focus].dir) || nsong) text_right(F_REG, 12, SCR_W - 40, 84, nsong ? T->accent : T->text3, found);
+        } else if ((nvid || nbook) && !(nents && ents[focus].dir)) {
             snprintf(found, sizeof(found), "%d video%s, %d book%s directly in here", nvid, nvid == 1 ? "" : "s", nbook, nbook == 1 ? "" : "s");
             text_right(F_REG, 12, SCR_W - 40, 84, T->text3, found);
         }

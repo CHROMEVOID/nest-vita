@@ -352,7 +352,7 @@ void history_enter(void);   void history_frame(float dt);
 void storage_enter(void);   void storage_frame(float dt);
 
 /* picker purposes */
-enum { PICK_ONBOARD, PICK_LIBRARY, PICK_SECRET, PICK_POSTER, PICK_LOGO, PICK_BACKDROP, PICK_EXCLUDE };
+enum { PICK_ONBOARD, PICK_LIBRARY, PICK_SECRET, PICK_POSTER, PICK_LOGO, PICK_BACKDROP, PICK_EXCLUDE, PICK_MUSIC };
 /* pin purposes */
 enum { PIN_CREATE, PIN_UNLOCK, PIN_CHANGE };
 /* scan purposes */
