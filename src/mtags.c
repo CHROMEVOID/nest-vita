@@ -157,6 +157,11 @@ static void id3_frame(MTags *t, const char *id, const uint8_t *d, int n, int ver
             set_if(t->genre, sizeof(t->genre), g);
         }
         else if (IS("TLEN", "TLE")) { if (!t->dur) t->dur = atoi(v); }
+    } else if (IS("USLT", "ULT") && t->lyrics && !t->lyrics[0] && n > 5) {
+        int enc = d[0];
+        char desc[128];
+        int used = id3_str(enc, d + 4, n - 4, desc, sizeof(desc)); /* after the 3-letter language */
+        if (4 + used < n) id3_str(enc, d + 4 + used, n - 4 - used, t->lyrics, t->lyrics_cap);
     } else if (IS("APIC", "PIC") && !t->art[0]) {
         int enc = d[0], i = 1;
         if (is) i += 3;
@@ -321,7 +326,11 @@ static void vorbis_comments(MTags *t, const uint8_t *p, int n, const char *path,
             int kl = (int)(eq - s), vlen = (int)(l - kl - 1);
             char key[32];
             snprintf(key, sizeof(key), "%.*s", MIN(kl, 31), s);
-            if (!strcasecmp(key, "METADATA_BLOCK_PICTURE")) {
+            if ((!strcasecmp(key, "LYRICS") || !strcasecmp(key, "UNSYNCEDLYRICS")) && t->lyrics && !t->lyrics[0]) {
+                int k2 = vlen < t->lyrics_cap - 1 ? vlen : t->lyrics_cap - 1;
+                memcpy(t->lyrics, eq + 1, k2);
+                t->lyrics[k2] = 0;
+            } else if (!strcasecmp(key, "METADATA_BLOCK_PICTURE")) {
                 if (!t->art[0] && art_dir) {
                     uint8_t *bin = malloc(vlen);
                     int bo = 0, acc = 0, bits = 0;
@@ -506,6 +515,11 @@ static void read_mp4(FILE *f, long fsize, MTags *t, const char *path, const char
                     else if (!memcmp(name, "trkn", 4) && vn >= 4) { if (!t->track) t->track = v[2] << 8 | v[3]; }
                     else if (!memcmp(name, "disk", 4) && vn >= 4) { if (!t->disc) t->disc = v[2] << 8 | v[3]; }
                     else if (!memcmp(name, "covr", 4)) save_art(t, path, art_dir, v, vn);
+                    else if (!memcmp(name, "\xa9lyr", 4) && t->lyrics && !t->lyrics[0]) {
+                        int k2 = (int)vn < t->lyrics_cap - 1 ? (int)vn : t->lyrics_cap - 1;
+                        memcpy(t->lyrics, v, k2);
+                        t->lyrics[k2] = 0;
+                    }
                 }
                 io += isz;
             }
@@ -878,4 +892,33 @@ void mtags_guess(const char *path, MTags *t) {
     if (t->year < 1000 || t->year > 2200) t->year = 0;
     if (t->track < 0 || t->track > 999) t->track = 0;
     if (t->disc < 0 || t->disc > 99) t->disc = 0;
+}
+
+/* ---------------- lyrics ---------------- */
+
+int mtags_lyrics(const char *path, char *out, int cap) {
+    if (!out || cap < 2) return 0;
+    out[0] = 0;
+    /* "Song.lrc" next to "Song.mp3" wins: people add those on purpose */
+    char lrc[1100];
+    snprintf(lrc, sizeof(lrc), "%s", path);
+    char *dot = strrchr(lrc, '.');
+    if (dot) {
+        strcpy(dot, ".lrc");
+        FILE *f = fopen(lrc, "rb");
+        if (f) {
+            int n = (int)fread(out, 1, cap - 1, f);
+            fclose(f);
+            out[n > 0 ? n : 0] = 0;
+            if (n > 3 && (unsigned char)out[0] == 0xEF && (unsigned char)out[1] == 0xBB && (unsigned char)out[2] == 0xBF)
+                memmove(out, out + 3, n - 2);
+            if (out[0]) return (int)strlen(out);
+        }
+    }
+    MTags t;
+    memset(&t, 0, sizeof(t));
+    t.lyrics = out;
+    t.lyrics_cap = cap;
+    mtags_read(path, 0, &t, NULL);
+    return (int)strlen(out);
 }

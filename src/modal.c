@@ -315,9 +315,10 @@ void modal_frame(float dt) {
     float h = head + bodyh + listh + (M.type == M_CONFIRM ? 70 : 0) + (M.type == M_RATE ? 120 : 0) + 22;
     if (h > SCR_H - 40) h = SCR_H - 40;
     float x = (SCR_W - w) / 2, y = (SCR_H - h) / 2 + (1 - ease_out(a)) * 30;
-    gfx_shadow(x, y + 10, w, h, T->radius + 4, 40, col_a(0xFF000000, 0.45f * a));
-    gfx_rrect(x, y, w, h, T->radius + 4, col_a(T->light ? T->surface : col_mix(T->surface, T->surface2, 0.5f), a));
-    gfx_rrect_outline(x, y, w, h, T->radius + 4, 1, col_a(T->text, 0.08f * a));
+    gfx_shadow(x, y + 10, w, h, T->radius + 4, 40, col_a(0xFF000000, 0.35f * a));
+    /* glass over a darker base, so text stays easy to read */
+    gfx_rrect(x, y, w, h, T->radius + 4, col_a(T->light ? T->surface : col_mix(T->surface, 0xFF000000, 0.25f), (S.glass ? 0.72f : 1.0f) * a));
+    gfx_glass(x, y, w, h, T->radius + 4, 0.9f * a);
 
     float tx = x + 28;
     if (M.type == M_QUICK && M.t) {

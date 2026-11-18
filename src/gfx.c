@@ -783,3 +783,29 @@ void icon(int id, float cx, float cy, float s, col_t c) {
 #undef Y
 #undef L
 }
+
+/* ---------- glass ---------- */
+
+void gfx_glass_tint(float x, float y, float w, float h, float r, float a, col_t tint) {
+    if (a <= 0.01f) return;
+    if (!S.glass) { /* plain, solid panels */
+        gfx_shadow(x, y + 6, w, h, r, 16, col_a(T->shadow, 0.8f * a));
+        gfx_rrect(x, y, w, h, r, col_a(col_mix(T->surface, T->surface2, 0.5f), 0.97f * a));
+        return;
+    }
+    int light = T->light;
+    gfx_shadow(x, y + 8, w, h, r, 22, col_a(0xFF000000, (light ? 0.14f : 0.32f) * a));
+    /* the frosted body: lets the scene behind show through, tinted by the theme */
+    col_t body = light ? col_a(0xFFFFFFFF, 0.62f * a) : col_a(col_mix(tint, 0xFF000000, 0.35f), 0.58f * a);
+    gfx_rrect(x, y, w, h, r, body);
+    /* gloss: bright at the top, fading down */
+    gfx_rrect_grad(x, y, w, h, r, col_a(0xFFFFFFFF, (light ? 0.30f : 0.13f) * a), col_a(0xFFFFFFFF, 0.0f));
+    /* a second, tighter shine along the top edge */
+    float sh = h < 60 ? h * 0.45f : 26;
+    gfx_rrect_grad(x + 1, y + 1, w - 2, sh, r, col_a(0xFFFFFFFF, (light ? 0.35f : 0.10f) * a), col_a(0xFFFFFFFF, 0));
+    /* rim light and a crisp top highlight */
+    gfx_rrect_outline(x, y, w, h, r, 1, col_a(0xFFFFFFFF, (light ? 0.55f : 0.14f) * a));
+    if (w > r * 2 + 4) gfx_rect(x + r, y + 0.5f, w - r * 2, 1, col_a(0xFFFFFFFF, (light ? 0.8f : 0.30f) * a));
+}
+
+void gfx_glass(float x, float y, float w, float h, float r, float a) { gfx_glass_tint(x, y, w, h, r, a, T->surface2); }

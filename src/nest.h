@@ -64,6 +64,9 @@ void gfx_line(float x0, float y0, float x1, float y1, float t, col_t c);
 void gfx_tex(vita2d_texture *tex, float x, float y, float w, float h, float r, col_t tint, float ax, float ay);
 void gfx_tex_fit(vita2d_texture *tex, float x, float y, float w, float h, col_t tint);
 void gfx_clip(float x, float y, float w, float h);
+/* frosted glass: see-through tinted panel, glossy sheen, light rim, soft shadow (a = opacity) */
+void gfx_glass(float x, float y, float w, float h, float r, float a);
+void gfx_glass_tint(float x, float y, float w, float h, float r, float a, col_t tint);
 void gfx_noclip(void);
 
 void text(int f, int size, float x, float y, col_t c, const char *s);
@@ -314,6 +317,7 @@ typedef struct {
     int thumbs;                             /* grab a frame from videos that have no artwork */
     int ambient_sound;                      /* 0 off, 1 rain, 2 vinyl */
     int video_fit;                          /* 0 fit, 1 fill, 2 stretch */
+    int glass;                              /* glassy panels (on by default) */
 } Settings;
 extern Settings S;
 void settings_load(void);

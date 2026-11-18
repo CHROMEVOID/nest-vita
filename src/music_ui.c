@@ -3,6 +3,7 @@
    the little player bar that follows you around the menus. */
 #include "nest.h"
 #include "music.h"
+#include "mtags.h"
 
 #define MG 40.0f
 
@@ -406,7 +407,13 @@ static void draw_home_rows(float dt, int focused, float top) {
     for (int r = 0; r < nhr; r++) {
         HRow *row = &hr[r];
         row->y = y + scy;
-        text(F_BOLD, 19, MG, y + 6, T->text, row->label);
+        if (S.glass) {
+            float lw = text_w(F_BOLD, 18, row->label);
+            gfx_glass(MG - 12, y - 16, lw + 40, 30, 15, focused && fr == r ? 1.0f : 0.7f);
+            gfx_rrect(MG - 1, y - 8, 3, 14, 1.5f, col_a(T->accent, focused && fr == r ? 1 : 0.6f));
+            text(F_BOLD, 18, MG + 10, y + 5, T->text, row->label);
+            gfx_rect(MG + lw + 40, y - 1, SCR_W - MG * 2 - lw - 40, 1, col_a(T->text, 0.07f));
+        } else text(F_BOLD, 19, MG, y + 6, T->text, row->label);
         y += 22;
         if (row->shortcuts) {
             /* compact tiles, three across */
@@ -1135,9 +1142,8 @@ static void eq_changed(void) { eq_save(); }
 
 static void draw_eq(float dt, float a) {
     float w = 860, h = 430, x = (SCR_W - w) / 2, y = (SCR_H - h) / 2 + (1 - a) * 20;
-    gfx_shadow(x, y + 10, w, h, T->radius, 40, col_a(0xFF000000, 0.6f * a));
-    gfx_rrect(x, y, w, h, T->radius, col_a(col_mix(T->bg, 0xFF000000, 0.3f), 0.98f * a));
-    gfx_rrect_outline(x, y, w, h, T->radius, 1, col_a(0xFFFFFFFF, 0.08f * a));
+    gfx_rrect(x, y, w, h, T->radius, col_a(col_mix(T->bg, 0xFF000000, 0.35f), 0.85f * a));
+    gfx_glass(x, y, w, h, T->radius, a);
     text(F_BOLD, 21, x + 28, y + 42, col_a(T->text, a), "Sound");
     int on = eq_enabled(), loud = eq_loud();
     /* switches */
@@ -1234,6 +1240,190 @@ static void draw_eq(float dt, float a) {
     if (in.tap && !touch_in(x, y, w, h)) eq_open = 0;
 }
 
+/* ---------------- lyrics ---------------- */
+
+static int lyr_open, lyr_track = -2, lyr_n, lyr_synced;
+static float lyr_a, lyr_scroll, lyr_scroll_t;
+static volatile int lyr_loading, lyr_ready;
+static char lyr_path[1024];
+static char *lyr_raw;           /* filled by the loader thread */
+static char *lyr_text;          /* the lines, one after another */
+typedef struct { int ms, off, h; } LLine;
+static LLine *lyr_lines;
+static int lyr_hdirty;
+
+static int lyr_thread(SceSize a, void *arg) {
+    (void)a;
+    (void)arg;
+    if (!lyr_raw) lyr_raw = malloc(65536);
+    if (lyr_raw) mtags_lyrics(lyr_path, lyr_raw, 65536);
+    lyr_ready = 1;
+    return sceKernelExitDeleteThread(0);
+}
+
+static int lcmp(const void *x, const void *y) {
+    const LLine *a = x, *b = y;
+    if (a->ms != b->ms) return a->ms - b->ms;
+    return a->off - b->off;
+}
+
+static void lyr_parse(void) {
+    lyr_n = 0;
+    lyr_synced = 0;
+    if (!lyr_raw || !lyr_raw[0]) return;
+    if (!lyr_text) lyr_text = malloc(70000);
+    if (!lyr_lines) lyr_lines = malloc(sizeof(LLine) * 800);
+    if (!lyr_text || !lyr_lines) return;
+    int tk = 0;
+    char *p = lyr_raw;
+    while (*p && lyr_n < 800) {
+        char *e = p;
+        while (*e && *e != '\n' && *e != '\r') e++;
+        char save = *e;
+        *e = 0;
+        /* timestamps at the front: [mm:ss.xx][mm:ss.xx]text */
+        int stamps[8], ns = 0;
+        char *q = p;
+        while (*q == '[') {
+            int mm = 0, ss = 0, frac = 0, nd = 0;
+            char *c = q + 1;
+            if (!isdigit((unsigned char)*c)) break; /* [ar:...] and friends */
+            while (isdigit((unsigned char)*c)) mm = mm * 10 + (*c++ - '0');
+            if (*c != ':') break;
+            c++;
+            while (isdigit((unsigned char)*c)) ss = ss * 10 + (*c++ - '0');
+            if (*c == '.' || *c == ':') {
+                c++;
+                while (isdigit((unsigned char)*c)) { if (nd < 3) { frac = frac * 10 + (*c - '0'); nd++; } c++; }
+            }
+            if (*c != ']') break;
+            while (nd < 3) { frac *= 10; nd++; }
+            if (ns < 8) stamps[ns++] = (mm * 60 + ss) * 1000 + frac;
+            q = c + 1;
+        }
+        if (*p == '[' && !ns) { /* a tag line like [ar:Artist]: skip */
+            char *c = strchr(p, ']');
+            if (c && c[1] == 0) { *e = save; p = *e ? e + 1 : e; continue; }
+        }
+        while (*q == ' ') q++;
+        /* the music-note symbol isn't in the font: show a soft pause instead */
+        char line[400];
+        int k = 0;
+        for (char *c = q; *c && k < 396; c++) {
+            if ((unsigned char)c[0] == 0xE2 && (unsigned char)c[1] == 0x99 && ((unsigned char)c[2] == 0xAA || (unsigned char)c[2] == 0xAB)) {
+                line[k++] = '~';
+                c += 2;
+                continue;
+            }
+            line[k++] = *c;
+        }
+        line[k] = 0;
+        if (ns || line[0] || lyr_n) {
+            int L2 = (int)strlen(line);
+            if (tk + L2 + 1 < 70000) {
+                memcpy(lyr_text + tk, line, L2 + 1);
+                for (int i = 0; i < (ns ? ns : 1) && lyr_n < 800; i++) {
+                    lyr_lines[lyr_n].ms = ns ? stamps[i] : -1;
+                    lyr_lines[lyr_n].off = tk;
+                    lyr_lines[lyr_n].h = 0;
+                    lyr_n++;
+                }
+                tk += L2 + 1;
+            }
+            if (ns) lyr_synced = 1;
+        }
+        *e = save;
+        p = *e ? e + 1 : e;
+        if (save == '\r' && *p == '\n') p++;
+    }
+    /* trailing empty lines go */
+    while (lyr_n > 0 && !lyr_text[lyr_lines[lyr_n - 1].off]) lyr_n--;
+    if (lyr_synced) {
+        int k = 0; /* drop untimed lines mixed into synced lyrics */
+        for (int i = 0; i < lyr_n; i++)
+            if (lyr_lines[i].ms >= 0) lyr_lines[k++] = lyr_lines[i];
+        lyr_n = k;
+        qsort(lyr_lines, lyr_n, sizeof(LLine), lcmp);
+    }
+    lyr_hdirty = 1;
+    lyr_scroll = lyr_scroll_t = 0;
+}
+
+/* load the lyrics of whatever is playing, in the background */
+static void lyrics_tick(int ti) {
+    if (lyr_ready) {
+        lyr_ready = 0;
+        lyr_loading = 0;
+        lyr_parse();
+    }
+    if (ti != lyr_track && !lyr_loading && ti >= 0 && ti < M.nt) {
+        lyr_track = ti;
+        lyr_n = 0;
+        snprintf(lyr_path, sizeof(lyr_path), "%s", M.t[ti].path);
+        lyr_loading = 1;
+        SceUID th = sceKernelCreateThread("nest_lyrics", lyr_thread, 0x10000100 + 20, 0x40000, 0, 0, NULL);
+        if (th < 0 || sceKernelStartThread(th, 0, NULL) < 0) lyr_loading = 0;
+    }
+}
+
+static void draw_lyrics(float x, float y, float w, float h, float a, float dt) {
+    gfx_glass_tint(x, y, w, h, T->radius + 4, a, 0xFF202028);
+    float pad = 22, tw = w - pad * 2;
+    if (lyr_loading || lyr_track != mus_current()) {
+        draw_spinner(x + w / 2, y + h / 2, 12, col_a(0xFFFFFFFF, a));
+        return;
+    }
+    if (!lyr_n) {
+        icon(IC_MIC, x + w / 2, y + h / 2 - 40, 30, col_a(0xFFFFFFFF, 0.5f * a));
+        text_center(F_SEMI, 16, x + w / 2, y + h / 2 + 4, col_a(0xFFFFFFFF, a), "No lyrics for this song");
+        text_center(F_REG, 12, x + w / 2, y + h / 2 + 28, col_a(0xFFFFFFFF, 0.55f * a), "Nest shows lyrics saved inside the song,");
+        text_center(F_REG, 12, x + w / 2, y + h / 2 + 46, col_a(0xFFFFFFFF, 0.55f * a), "or from a .lrc file with the same name.");
+        return;
+    }
+    if (lyr_hdirty) { /* line heights, once */
+        for (int i = 0; i < lyr_n; i++) {
+            const char *tx = lyr_text + lyr_lines[i].off;
+            int nl = tx[0] ? text_wrap_count(F_BOLD, 17, tw, tx) : 1;
+            if (nl < 1) nl = 1;
+            if (nl > 4) nl = 4;
+            lyr_lines[i].h = nl * 23 + 14;
+        }
+        lyr_hdirty = 0;
+    }
+    int pos = mus_pos_ms(), dur = mus_dur_ms();
+    int cur = -1;
+    if (lyr_synced)
+        for (int i = 0; i < lyr_n; i++)
+            if (lyr_lines[i].ms <= pos + 250) cur = i;
+    float total = 0, cur_y = 0;
+    for (int i = 0; i < lyr_n; i++) {
+        if (i == cur) cur_y = total;
+        total += lyr_lines[i].h;
+    }
+    if (lyr_synced) lyr_scroll_t = cur >= 0 ? cur_y - h * 0.36f : -h * 0.36f;
+    else lyr_scroll_t = dur > 0 ? (float)pos / dur * fmaxf(0, total - h * 0.5f) - 20 : 0;
+    if (in.dragging && touch_in(x, y, w, h)) { lyr_scroll -= in.ddy; lyr_scroll_t = lyr_scroll; }
+    if (!in.touching) lyr_scroll = approach(lyr_scroll, lyr_scroll_t, 5, dt);
+    gfx_clip(x + 2, y + 2, w - 4, h - 4);
+    float ly = y + pad - lyr_scroll;
+    for (int i = 0; i < lyr_n; i++) {
+        float lh = lyr_lines[i].h;
+        if (ly + lh > y && ly < y + h) {
+            const char *tx = lyr_text + lyr_lines[i].off;
+            float al = !lyr_synced ? 0.85f : i == cur ? 1.0f : i < cur ? 0.32f : 0.5f;
+            col_t c = i == cur ? 0xFFFFFFFF : col_a(0xFFFFFFFF, al);
+            if (tx[0]) text_wrap(F_BOLD, 17, x + pad, ly + 18, tw, 23, 4, col_a(c, a), tx);
+            if (lyr_synced && hit(x, ly, w, lh) && !in.dragging) mus_seek(lyr_lines[i].ms); /* tap a line to jump there */
+        }
+        ly += lh;
+    }
+    gfx_noclip();
+    /* soft fade at the top and bottom */
+    gfx_rrect_grad(x, y, w, 40, T->radius + 4, col_a(0xFF101016, 0.55f * a), col_a(0xFF101016, 0));
+    gfx_grad_v(x, y + h - 40, w, 40, col_a(0xFF101016, 0), col_a(0xFF101016, 0.45f * a));
+    if (!lyr_synced) text_right(F_META, 10, x + w - 14, y + h - 12, col_a(0xFFFFFFFF, 0.4f * a), "not synced");
+}
+
 void nowplaying_open(void) {
     nf = 1;
     nb = 2;
@@ -1278,9 +1468,10 @@ static void np_action(int row, int b) {
             break;
         case 1: if (ti >= 0) { menu_track = ti; pick_playlist(); } break;
         case 2: queue_open = !queue_open; qf = 0; break;
-        case 3: eq_open = 1; eq_f = 1; break;
-        case 4: sleep_menu(); break;
-        case 5: mus_screen_off(); break;
+        case 3: lyr_open = !lyr_open; break;
+        case 4: eq_open = 1; eq_f = 1; break;
+        case 5: sleep_menu(); break;
+        case 6: mus_screen_off(); break;
         }
     }
 }
@@ -1289,8 +1480,8 @@ static void draw_queue(float dt, float a) {
     int cur = 0;
     int n = mus_queue(qbuf, 8192, &cur);
     float x = SCR_W - 440, w = 420, y0 = 20, h = SCR_H - 40;
-    gfx_shadow(x, y0 + 8, w, h, T->radius, 30, col_a(0xFF000000, 0.55f * a));
-    gfx_rrect(x, y0, w, h, T->radius, col_a(col_mix(T->bg, 0xFF000000, 0.35f), 0.97f * a));
+    gfx_rrect(x, y0, w, h, T->radius, col_a(col_mix(T->bg, 0xFF000000, 0.4f), 0.8f * a));
+    gfx_glass(x, y0, w, h, T->radius, a);
     text(F_BOLD, 19, x + 20, y0 + 34, col_a(T->text, a), "Queue");
     char sub[64];
     snprintf(sub, sizeof(sub), "%d song%s up next", n - cur - 1 > 0 ? n - cur - 1 : 0, n - cur - 1 == 1 ? "" : "s");
@@ -1371,7 +1562,7 @@ void nowplaying_frame(float dt) {
     if (in.pressed & B_START) music_track_menu(ti, -1, -1);
     if (!queue_open) {
         int moved = 0;
-        int maxb = nf == 1 ? 4 : 5;
+        int maxb = nf == 1 ? 4 : 6;
         if (in.repeat & B_UP && nf > 0) { nf--; moved = 1; if (nf == 1) nb = 2; else if (nf == 2) nb = 0; }
         if (in.repeat & B_DOWN && nf < 3) { nf++; moved = 1; nb = nf == 1 ? 2 : 0; }
         if (nf == 0) {
@@ -1398,8 +1589,20 @@ void nowplaying_frame(float dt) {
     float bump = 1 + 0.012f * mus_level() * (S.reduce_motion ? 0 : 1);
     float aw = as * bump;
     gfx_shadow(ax, ay + 14, as, as, T->radius, 40, col_a(0xFF000000, 0.6f));
-    art_draw(t->art, t->album, ax + (as - aw) / 2, ay + (as - aw) / 2, aw, aw, T->radius, 1);
-    if (hit(ax, ay, as, as)) mus_toggle();
+    lyrics_tick(ti);
+    lyr_a = approach(lyr_a, lyr_open ? 1 : 0, 10, dt);
+    if (lyr_a < 0.99f) {
+        art_draw(t->art, t->album, ax + (as - aw) / 2, ay + (as - aw) / 2, aw, aw, T->radius, 1 - lyr_a);
+        if (!lyr_open && hit(ax, ay, as, as)) mus_toggle();
+        if (!lyr_open && lyr_n > 0 && lyr_track == ti) { /* a little "Lyrics" pill on the cover */
+            float pw2 = 84, ph2 = 28, px2 = ax + 12, py2 = ay + as - ph2 - 12;
+            gfx_glass_tint(px2, py2, pw2, ph2, ph2 / 2, 1 - lyr_a, 0xFF202028);
+            icon(IC_MIC, px2 + 16, py2 + ph2 / 2, 13, col_a(0xFFFFFFFF, 1 - lyr_a));
+            text(F_SEMI, 12, px2 + 28, py2 + 18, col_a(0xFFFFFFFF, 1 - lyr_a), "Lyrics");
+            if (hit(px2 - 4, py2 - 4, pw2 + 8, ph2 + 8)) { lyr_open = 1; input_consume_touch(); }
+        }
+    }
+    if (lyr_a > 0.01f) draw_lyrics(36, 80, as + 56, 404, lyr_a, dt);
 
     /* top bar */
     icon(IC_CHEVRON_D, 34, 34, 20, 0xFFFFFFFF);
@@ -1422,6 +1625,7 @@ void nowplaying_frame(float dt) {
 
     /* ---------- title block ---------- */
     float rx = 420, rw = SCR_W - rx - 56;
+    gfx_glass(rx - 26, 150, rw + 52, 372, T->radius + 4, 0.75f);
     float ty = 190;
     int tfs = T->display_font == 2 ? 24 : 30;
     if (text_w(F_DISPLAY, tfs, t->title) > rw) tfs = tfs * 4 / 5;
@@ -1491,29 +1695,30 @@ void nowplaying_frame(float dt) {
 
     /* ---------- extras row ---------- */
     float ey = 432;
-    int ics[6] = {t->liked ? IC_HEART_FILL : IC_HEART, IC_PLUS, IC_QUEUE, IC_EQ, IC_TIMER, IC_SCREEN_OFF};
-    static const char *elab[6] = {"Like", "Playlist", "Queue", "Sound", "Sleep", "Screen off"};
-    float estep = rw / 6;
-    for (int i = 0; i < 6; i++) {
+    int ics[7] = {t->liked ? IC_HEART_FILL : IC_HEART, IC_PLUS, IC_QUEUE, IC_MIC, IC_EQ, IC_TIMER, IC_SCREEN_OFF};
+    static const char *elab[7] = {"Like", "Playlist", "Queue", "Lyrics", "Sound", "Sleep", "Screen off"};
+    float estep = rw / 7;
+    for (int i = 0; i < 7; i++) {
         float x = rx + estep * (i + 0.5f);
         float f = nf == 2 && nb == i && !queue_open && !eq_open ? 1 : 0;
         if (f) gfx_circle(x, ey, 21, col_a(0xFFFFFFFF, 0.16f));
         col_t c = col_a(0xFFFFFFFF, 0.8f);
         if (i == 0 && t->liked) c = T->accent;
         if (i == 2 && queue_open) c = T->accent;
-        if (i == 3 && (eq_enabled() || eq_loud())) c = T->accent;
-        if (i == 4 && mus_sleep_left()) c = T->accent;
+        if (i == 3 && lyr_open) c = T->accent;
+        if (i == 4 && (eq_enabled() || eq_loud())) c = T->accent;
+        if (i == 5 && mus_sleep_left()) c = T->accent;
         icon(ics[i], x, ey, 20, c);
         if (f) gfx_ring(x, ey, 21, 1.5f, col_a(0xFFFFFFFF, 0.6f));
         const char *lab = elab[i];
         char sl[32];
-        if (i == 4 && mus_sleep_left()) {
+        if (i == 5 && mus_sleep_left()) {
             int s2 = mus_sleep_left();
             if (s2 < 0) snprintf(sl, sizeof(sl), "end of song");
             else snprintf(sl, sizeof(sl), "%d:%02d", s2 / 60, s2 % 60);
             lab = sl;
         }
-        if (i == 3 && eq_enabled()) {
+        if (i == 4 && eq_enabled()) {
             int pr = eq_matching_preset();
             lab = pr >= 0 ? EQ_PRESETS[pr].name : "Custom";
         }
@@ -1552,7 +1757,7 @@ void nowplaying_frame(float dt) {
     }
 
     /* little level bars under the cover */
-    if (playing && !S.reduce_motion) {
+    if (playing && !S.reduce_motion && lyr_a < 0.5f) {
         for (int b = 0; b < 24; b++) {
             float k2 = 0.25f + 0.75f * fabsf(sinf(g_time * (3.1f + (b % 5) * 0.9f) + b * 0.7f));
             float h = 3 + 22 * k2 * mus_level();
@@ -1611,12 +1816,11 @@ void miniplayer_draw(float dt, int top) {
     MTrack *t = &M.t[ti];
     float a = mini_a;
     float h = 56, x = 14, w = SCR_W - 28, y = SCR_H - h - 10 + (1 - a) * 30;
-    gfx_shadow(x, y + 6, w, h, 14, 18, col_a(0xFF000000, 0.5f * a));
-    gfx_rrect(x, y, w, h, 14, col_a(col_mix(T->bg, 0xFF000000, 0.25f), 0.96f * a));
+    gfx_rrect(x, y, w, h, 14, col_a(col_mix(T->bg, 0xFF000000, 0.35f), 0.88f * a));
     gfx_clip(x, y, w, h);
-    art_blur(t->art, x, y, w, h, 0.35f * a);
+    art_blur(t->art, x, y, w, h, 0.45f * a);
     gfx_noclip();
-    gfx_rrect_outline(x, y, w, h, 14, 1, col_a(0xFFFFFFFF, 0.08f * a));
+    gfx_glass(x, y, w, h, 14, 0.8f * a);
     art_draw(t->art, t->album, x + 8, y + 8, 40, 40, 8, a);
     text_ellipsis(F_SEMI, 14, x + 60, y + 25, w - 260, col_a(0xFFFFFFFF, a), t->title);
     text_ellipsis(F_REG, 12, x + 60, y + 43, w - 260, col_a(0xFFFFFFFF, 0.65f * a), t->artist);

@@ -1,5 +1,6 @@
 /* Shared visual building blocks. */
 #include "nest.h"
+#include "music.h"
 
 int g_poster_caption;
 
@@ -316,8 +317,9 @@ void draw_toasts(float dt) {
     }
     float a = clampf(fminf(toast_t / 0.2f, (life - toast_t) / 0.35f), 0, 1);
     float w = text_w(F_SEMI, 14, toast_msg) + 40, h = 38;
-    float x = (SCR_W - w) / 2, y = SCR_H - 70 + (1 - ease_out(a)) * 14;
-    gfx_shadow(x, y + 4, w, h, h / 2, 14, col_a(T->shadow, a));
-    gfx_rrect(x, y, w, h, h / 2, col_a(col_mix(T->surface2, T->text, T->light ? 0.0f : 0.06f), 0.97f * a));
+    int top = nav_top();
+    float lift = (top == SCR_MAIN || top == SCR_DETAIL || top == SCR_MPAGE || top == SCR_SEARCH) ? miniplayer_height() : 0;
+    float x = (SCR_W - w) / 2, y = SCR_H - 70 - lift + (1 - ease_out(a)) * 14; /* never on top of the music bar */
+    gfx_glass(x, y, w, h, h / 2, a);
     text_center(F_SEMI, 14, SCR_W / 2.0f, y + 24, col_a(T->text, a), toast_msg);
 }

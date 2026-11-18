@@ -7,6 +7,8 @@ typedef struct {
     char title[256], artist[256], aartist[256], album[256], genre[64];
     int track, disc, year, dur; /* dur in ms */
     char art[160];              /* cached cover file, "" if none */
+    char *lyrics;               /* when set (with lyrics_cap), lyrics are copied here too */
+    int lyrics_cap;
 } MTags;
 
 int mtags_is_audio(const char *name);
@@ -18,4 +20,6 @@ void mtags_guess(const char *path, MTags *t);
 /* tidy a title or artist pulled from a file name ("_" to spaces, junk like [320kbps] removed) */
 void mtags_clean(char *s);
 unsigned mtags_hash(const char *s);
+/* lyrics for a song: a .lrc file next to it, or the lyrics stored inside it. Returns the length (0 = none) */
+int mtags_lyrics(const char *path, char *out, int cap);
 #endif

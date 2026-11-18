@@ -840,8 +840,8 @@ void player_frame(float dt) {
         float a = clampf(vol_flash * 1.6f, 0, 1);
         float x = vs_x, y = vs_y, h = vs_h, w = 16;
         float k = (float)vol_pct / VOL_MAX, mid = y + h * (1 - 100.0f / VOL_MAX);
-        gfx_shadow(x - 22, y - 46, w + 44, h + 92, 22, 18, col_a(0xFF000000, 0.35f * a));
-        gfx_rrect(x - 22, y - 46, w + 44, h + 92, 22, col_a(0xFF0E0E12, 0.72f * a));
+        gfx_rrect(x - 22, y - 46, w + 44, h + 92, 22, col_a(0xFF0E0E12, 0.55f * a));
+        gfx_glass_tint(x - 22, y - 46, w + 44, h + 92, 22, a, 0xFF202028);
         gfx_rrect(x, y, w, h, w / 2, col_a(0xFFFFFFFF, 0.18f * a));
         float fy = y + h * (1 - k);
         if (vol_pct > 100) { /* boost part glows in the accent colour */
@@ -955,7 +955,9 @@ void player_frame(float dt) {
             gfx_rrect(bx - 34, sy2 - 40, 68, 26, 8, col_a(0xFF000000, 0.7f));
             text_center(F_SEMI, 13, bx, sy2 - 22, 0xFFFFFFFF, tl);
         }
-        /* buttons */
+        /* buttons: on a glass bar */
+        gfx_rrect(SCR_W / 2 - 200, SCR_H - 66, 400, 56, 28, col_a(0xFF000000, 0.35f * a));
+        gfx_glass_tint(SCR_W / 2 - 200, SCR_H - 66, 400, 56, 28, 0.8f * a, 0xFF202028);
         int ics[9] = {IC_PREV, IC_REW, paused ? IC_PLAY : IC_PAUSE, IC_FWD, IC_NEXT, IC_SUBS, IC_SPEED, IC_VOLUME, IC_GRID};
         float cy = SCR_H - 38;
         float cxs[9] = {SCR_W / 2 - 150, SCR_W / 2 - 80, SCR_W / 2, SCR_W / 2 + 80, SCR_W / 2 + 150, SCR_W - 200, SCR_W - 150, SCR_W - 100, SCR_W - 50};

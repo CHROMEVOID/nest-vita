@@ -47,6 +47,7 @@ void settings_load(void) {
     S.thumbs = db_geti("thumbs", 1);
     S.ambient_sound = db_geti("ambient_sound", 0);
     S.video_fit = db_geti("video_fit", 0);
+    S.glass = db_geti("glass", 1);
 }
 
 void settings_save(void) {
@@ -77,6 +78,7 @@ void settings_save(void) {
     db_seti("thumbs", S.thumbs);
     db_seti("ambient_sound", S.ambient_sound);
     db_seti("video_fit", S.video_fit);
+    db_seti("glass", S.glass);
     db_exec("COMMIT");
 }
 

@@ -77,6 +77,8 @@ static void build(void) {
         r->val = &S.hero_rotate;
         r = add(R_TOGGLE, "Reduce motion", "Calmer transitions, slower scenes");
         r->val = &S.reduce_motion;
+        r = add(R_TOGGLE, "Glass effects", "See-through, glossy panels over the scenes");
+        r->val = &S.glass;
         r = add(R_TOGGLE, "Interface sounds", "Soft ticks when moving around");
         r->val = &S.sounds;
         r = add(R_CHOICE, "Ambient sound", "Quiet background while browsing and reading");

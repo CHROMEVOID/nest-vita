@@ -250,10 +250,7 @@ static void draw_nav(float dt, float alpha) {
         tx[i] = x;
         x += tw[i] + 4;
     }
-    if (T->nav_style == 0) {
-        gfx_rrect(160, 15, x - 160 + 4, 40, 20, col_a(T->light ? 0xFF000000 : 0xFFFFFFFF, 0.07f * alpha));
-        gfx_rrect_outline(160, 15, x - 160 + 4, 40, 20, 1, col_a(T->text, 0.06f * alpha));
-    }
+    if (T->nav_style == 0) gfx_glass(160, 15, x - 160 + 4, 40, 20, alpha);
     pill_x = approach(pill_x, tx[tab], S.reduce_motion ? 40 : 16, dt);
     pill_w = approach(pill_w, tw[tab], 16, dt);
     if (T->nav_style == 0)
@@ -282,7 +279,7 @@ static void draw_nav(float dt, float alpha) {
     for (int i = 0; i < 2; i++) {
         int focused = frow == -1 && nav_i == TAB_COUNT + i;
         if (focused) gfx_circle(ix[i], 35, 19, col_a(T->text, 0.92f));
-        else gfx_circle(ix[i], 35, 19, col_a(T->light ? 0xFF000000 : 0xFFFFFFFF, 0.06f));
+        else gfx_glass(ix[i] - 19, 16, 38, 38, 19, 0.9f);
         icon(ics[i], ix[i], 35, 19, focused ? T->bg : col_a(T->text, alpha));
         if (hit(ix[i] - 22, 12, 44, 46)) {
             input_consume_touch();
@@ -329,7 +326,7 @@ static void draw_hero_art(Title *t, float y0, float alpha) {
     }
     if (tex) {
         /* very slow drift keeps the hero alive without distracting */
-        float drift = S.reduce_motion ? 0 : sinf(g_time * 0.08f) * 0.04f;
+        float drift = 0; /* the old slow pan moved the picture by fractions of a pixel: it shimmered */
         gfx_tex(tex, 0, y0, SCR_W, HERO_H + 40, 0, col_a(0xFFFFFFFF, alpha * ease_out(fade)), 0.5f + drift, ay);
     }
 }
@@ -374,7 +371,8 @@ static void draw_hero(float y0, float dt, int focused) {
     gfx_grad_v(0, y0 + HERO_H - 150, SCR_W, 190, col_a(T->bg, 0), T->bg);
 
     float ta = hero_prev >= 0 ? ease_out(hero_fade) : 1;
-    float slide = (1 - ta) * 10;
+    float slide = 0; /* no sliding text: it read as a twitch when the hero changed */
+    if (S.glass) gfx_glass(MARGIN - 18, y0 + 78, 520, HERO_H - 78 - 8, T->radius + 2, 0.85f);
     float x = MARGIN, y = y0 + 98 + slide;
     /* label */
     const char *label = t->resume >= 0 ? (t->kind == KIND_BOOK ? "CONTINUE READING" : "CONTINUE WATCHING")
@@ -512,7 +510,15 @@ static void draw_rows(float dt) {
         if (!in.dragging || touch_row != ri) r->sx = approach(r->sx, r->sx_t, S.ambient ? 7 : 11, dt);
         /* label */
         int ls = T->display_font == 1 ? 19 : 17;
-        text(T->display_font == 1 ? F_DISPLAY : F_SEMI, ls, MARGIN, y + 22, col_a(focused ? T->text : T->text2, 1), r->label);
+        int lf = T->display_font == 1 ? F_DISPLAY : F_SEMI;
+        if (S.glass) { /* a clear section header: glass pill with an accent mark */
+            float lw = text_w(lf, ls, r->label);
+            gfx_glass(MARGIN - 12, y + 2, lw + 40, 30, 15, focused ? 1.0f : 0.7f);
+            gfx_rrect(MARGIN - 1, y + 10, 3, 14, 1.5f, col_a(T->accent, focused ? 1 : 0.6f));
+            text(lf, ls, MARGIN + 10, y + 23, col_a(focused ? T->text : T->text2, 1), r->label);
+            gfx_rect(MARGIN + lw + 40, y + 17, SCR_W - MARGIN * 2 - lw - 40, 1, col_a(T->text, 0.07f)); /* divider */
+        } else
+            text(lf, ls, MARGIN, y + 22, col_a(focused ? T->text : T->text2, 1), r->label);
         if (r->type == ROW_ACTION) {
             draw_button(MARGIN, y + 36, 220, 46, IC_FOLDER, r->label, 0, focused ? 1 : 0);
             if (hit(MARGIN, y + 36, 220, 46) || (focused && (in.pressed & B_OK))) picker_open(PICK_SECRET);
