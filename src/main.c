@@ -47,7 +47,7 @@ void settings_load(void) {
     S.thumbs = db_geti("thumbs", 1);
     S.ambient_sound = db_geti("ambient_sound", 0);
     S.video_fit = db_geti("video_fit", 0);
-    S.glass = db_geti("glass", 1);
+    S.glass = db_geti("glass2", 0); /* off unless you turn it on */
 }
 
 void settings_save(void) {
@@ -78,7 +78,7 @@ void settings_save(void) {
     db_seti("thumbs", S.thumbs);
     db_seti("ambient_sound", S.ambient_sound);
     db_seti("video_fit", S.video_fit);
-    db_seti("glass", S.glass);
+    db_seti("glass2", S.glass);
     db_exec("COMMIT");
 }
 
@@ -360,7 +360,7 @@ int main(void) {
         draw_toasts(dt);
 
         /* cross-fade between screens */
-        float speed = S.reduce_motion ? 14 : 9;
+        float speed = S.reduce_motion ? 22 : 17; /* quick and clean between screens */
         if (fading_out) {
             fade = approach(fade, 1.05f, speed * 1.4f, dt);
             if (fade >= 0.98f) {

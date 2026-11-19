@@ -160,12 +160,9 @@ void search_frame(float dt) {
     }
     float cell = phv + 36;
     int row = rfocus / cols;
-    if (zone == 2) rsy_t = fmaxf(0, row * cell - cell * 0.5f);
-    else rsy_t = 0;
-    if (in.dragging) { rsy -= in.ddy; rsy_t = rsy; }
-    float maxs = fmaxf(0, ((nres + cols - 1) / cols) * cell - (SCR_H - top) + 20);
-    rsy_t = clampf(rsy_t, 0, maxs);
-    if (!in.touching) rsy = approach(rsy, rsy_t, 11, dt);
+    if ((in.repeat & (B_UP | B_DOWN | B_LEFT | B_RIGHT))) rsy_t = zone == 2 ? fmaxf(0, row * cell - cell * 0.5f) : 0;
+    static KScroll sks;
+    kscroll(&rsy, &rsy_t, &sks, ((nres + cols - 1) / cols) * cell - (SCR_H - top) + 20, in.dragging, in.ddy, in.vy, dt);
     rfsel = approach(rfsel, (float)rfocus, 20, dt);
     gfx_clip(0, top - 10, SCR_W, SCR_H - top + 10);
     for (int i = 0; i < nres; i++) {

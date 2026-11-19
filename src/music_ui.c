@@ -257,6 +257,7 @@ typedef struct {
     int n, col, shortcuts;
     float sx, sx_t;
     float y, h;
+    KScroll ks;
 } HRow;
 static HRow hr[6];
 static int nhr;
@@ -439,17 +440,9 @@ static void draw_home_rows(float dt, int focused, float top) {
         }
         /* a sideways shelf of cards */
         float stride = CARD + CGAP;
-        if (focused && fr == r) {
-            float want = fc * stride - (SCR_W - MG * 2 - CARD) / 2;
-            float maxs = fmaxf(0, row->n * stride - CGAP - (SCR_W - MG * 2));
-            row->sx_t = clampf(want, 0, maxs);
-        }
-        if (in.dragging && touch_in(0, y - 10, SCR_W, CARD + 50) && fabsf(in.tx - in.sx) > fabsf(in.ty - in.sy)) {
-            row->sx -= in.ddx;
-            row->sx_t = row->sx;
-        }
-        row->sx_t = clampf(row->sx_t, 0, fmaxf(0, row->n * stride - CGAP - (SCR_W - MG * 2)));
-        if (!in.touching) row->sx = approach(row->sx, row->sx_t, 12, dt);
+        if (focused && fr == r && (in.repeat & (B_UP | B_DOWN | B_LEFT | B_RIGHT))) row->sx_t = fc * stride - (SCR_W - MG * 2 - CARD) / 2;
+        int grab = in.dragging && touch_in(0, y - 10, SCR_W, CARD + 50) && fabsf(in.tx - in.sx) > fabsf(in.ty - in.sy);
+        kscroll(&row->sx, &row->sx_t, &row->ks, row->n * stride - CGAP - (SCR_W - MG * 2), grab, in.ddx, in.vx, dt);
         for (int i = 0; i < row->n; i++) {
             float x = MG + i * stride - row->sx;
             if (x > SCR_W || x + CARD < 0) continue;
@@ -820,16 +813,11 @@ void music_tab_frame(float dt, int focused, int *want_nav) {
             if (fy + fh - scy_t > view) scy_t = fy + fh - view;
         } else if (moved && fr < 0) scy_t = 0;
     }
-    if (in.dragging && touch_in(0, top - 20, SCR_W, SCR_H)) {
-        if (fabsf(in.ty - in.sy) >= fabsf(in.tx - in.sx) || mv != MV_HOME) {
-            scy -= in.ddy;
-            scy_t = scy;
-        }
+    {
+        static KScroll tks;
+        int grab = in.dragging && touch_in(0, top - 20, SCR_W, SCR_H) && (fabsf(in.ty - in.sy) >= fabsf(in.tx - in.sx) || mv != MV_HOME);
+        kscroll(&scy, &scy_t, &tks, content_h - (SCR_H - top - bottom_pad - 20), grab, in.ddy, in.vy, dt);
     }
-    if (in.released) scy_t = scy - in.vy * 0.28f;
-    float maxs = fmaxf(0, content_h - (SCR_H - top - bottom_pad - 20));
-    scy_t = clampf(scy_t, 0, maxs);
-    if (!in.touching) scy = approach(scy, scy_t, 11, dt);
     fsel = approach(fsel, (float)fc, 18, dt);
 
     /* ---------- content ---------- */
@@ -1030,13 +1018,11 @@ void mpage_frame(float dt) {
             if (fy + ROWH - psy_t > view) psy_t = fy + ROWH - view;
         }
     }
-    if (in.dragging && !(strip && touch_in(0, head_h - psy, SCR_W, strip_h))) {
-        psy -= in.ddy;
-        psy_t = psy;
+    {
+        static KScroll pks;
+        int grab = in.dragging && !(strip && touch_in(0, head_h - psy, SCR_W, strip_h) && fabsf(in.tx - in.sx) > fabsf(in.ty - in.sy));
+        kscroll(&psy, &psy_t, &pks, list_top + pn * ROWH - (SCR_H - bottom_pad - 30), grab, in.ddy, in.vy, dt);
     }
-    if (in.released) psy_t = psy - in.vy * 0.28f;
-    psy_t = clampf(psy_t, 0, fmaxf(0, list_top + pn * ROWH - (SCR_H - bottom_pad - 30)));
-    if (!in.touching) psy = approach(psy, psy_t, 11, dt);
 
     /* ---------- header ---------- */
     float y0 = 64 - psy;
@@ -1075,10 +1061,10 @@ void mpage_frame(float dt) {
         float sy0 = head_h - psy;
         text(F_BOLD, 18, MG, sy0 + 6, T->text, "Albums");
         float stride = CARD + CGAP;
-        if (pf == 1) pstrip_t = clampf(pal * stride - (SCR_W - MG * 2 - CARD) / 2, 0, fmaxf(0, r->nal * stride - CGAP - (SCR_W - MG * 2)));
-        if (in.dragging && touch_in(0, sy0, SCR_W, strip_h)) { pstrip -= in.ddx; pstrip_t = pstrip; }
-        pstrip_t = clampf(pstrip_t, 0, fmaxf(0, r->nal * stride - CGAP - (SCR_W - MG * 2)));
-        if (!in.touching) pstrip = approach(pstrip, pstrip_t, 12, dt);
+        if (pf == 1 && (in.repeat & (B_UP | B_DOWN | B_LEFT | B_RIGHT))) pstrip_t = pal * stride - (SCR_W - MG * 2 - CARD) / 2;
+        static KScroll stks;
+        int sgrab = in.dragging && touch_in(0, sy0, SCR_W, strip_h) && fabsf(in.tx - in.sx) > fabsf(in.ty - in.sy);
+        kscroll(&pstrip, &pstrip_t, &stks, r->nal * stride - CGAP - (SCR_W - MG * 2), sgrab, in.ddx, in.vx, dt);
         for (int i = 0; i < r->nal; i++) {
             float x = MG + i * stride - pstrip;
             if (x > SCR_W || x + CARD < 0) continue;
@@ -1495,11 +1481,12 @@ static void draw_queue(float dt, float a) {
     if (qf < 0) qf = 0;
     float view = h - 60;
     float fy = qf * rh;
-    if (fy - qsy_t < 0) qsy_t = fy;
-    if (fy + rh - qsy_t > view) qsy_t = fy + rh - view;
-    if (in.dragging && touch_in(x, y0, w, h)) { qsy -= in.ddy; qsy_t = qsy; }
-    qsy_t = clampf(qsy_t, 0, fmaxf(0, count * rh - view));
-    if (!in.touching) qsy = approach(qsy, qsy_t, 12, dt);
+    if ((in.repeat & (B_UP | B_DOWN | B_LEFT | B_RIGHT))) {
+        if (fy - qsy_t < 0) qsy_t = fy;
+        if (fy + rh - qsy_t > view) qsy_t = fy + rh - view;
+    }
+    static KScroll qks;
+    kscroll(&qsy, &qsy_t, &qks, count * rh - view, in.dragging && touch_in(x, y0, w, h), in.ddy, in.vy, dt);
     gfx_clip(x, ly, w, view);
     for (int i = 0; i < count; i++) {
         float y = ly + i * rh - qsy;

@@ -94,13 +94,18 @@ void input_update(float dt) {
         } else {
             float dx = x - in.tx, dy = y - in.ty;
             touch_time += dt;
-            if (!moved && (fabsf(x - in.sx) > 14 || fabsf(y - in.sy) > 14)) {
+            int started = 0;
+            if (!moved && (fabsf(x - in.sx) > 10 || fabsf(y - in.sy) > 10)) {
                 moved = 1;
                 in.dragging = 1;
+                started = 1;
             }
             if (in.dragging) {
-                in.ddx = dx;
-                in.ddy = dy;
+                /* the frame a drag starts, catch up with everything the finger already moved */
+                in.ddx = started ? x - in.sx : dx;
+                in.ddy = started ? y - in.sy : dy;
+                if (fabsf(dx) + fabsf(dy) < 0.6f) still_time += dt;
+                else still_time = 0;
                 if (dt > 0) {
                     vel_x = lerpf(vel_x, dx / dt, 0.4f);
                     vel_y = lerpf(vel_y, dy / dt, 0.4f);
@@ -133,8 +138,9 @@ void input_update(float dt) {
                     last_tap_y = in.sy;
                 }
             }
-            in.vx = in.dragging ? vel_x : 0;
-            in.vy = in.dragging ? vel_y : 0;
+            int stopped = still_time > 0.07f;
+            in.vx = in.dragging && !stopped ? vel_x : 0;
+            in.vy = in.dragging && !stopped ? vel_y : 0;
         }
         in.touching = 0;
         in.dragging = 0;
@@ -157,4 +163,36 @@ int touch_in(float x, float y, float w, float h) {
 
 void input_consume_touch(void) {
     in.tap = in.long_press = in.double_tap = 0;
+}
+
+void kscroll(float *pos, float *tgt, KScroll *k, float max, int grab, float d, float v, float dt) {
+    if (max < 0) max = 0;
+    if (in.touching && !in.dragging && !k->held) k->vel = 0; /* a touch stops a glide, like on a phone */
+    if ((grab || k->held) && in.touching && in.dragging) {
+        float nd = d;
+        if (*pos < 0 || *pos > max) nd *= 0.4f; /* past the end: it stretches */
+        *pos -= nd;
+        *tgt = *pos;
+        k->vel = 0;
+        k->held = 1;
+        return;
+    }
+    if (k->held && !in.touching) { /* let go: keep the speed */
+        k->held = 0;
+        k->vel = clampf(-v, -6000, 6000);
+        if (fabsf(k->vel) < 80) k->vel = 0;
+    }
+    if (in.repeat & (B_UP | B_DOWN | B_LEFT | B_RIGHT)) k->vel = 0; /* the d-pad takes over */
+    if (k->vel != 0) {
+        *pos += k->vel * dt;
+        int out = *pos < 0 || *pos > max;
+        k->vel *= expf(-(out ? 18.0f : 2.3f) * dt); /* a long, gentle slow-down */
+        if (fabsf(k->vel) < 10) k->vel = 0;
+        if (out) *pos = approach(*pos, clampf(*pos, 0, max), 10, dt);
+        *tgt = clampf(*pos, 0, max);
+    } else {
+        *tgt = clampf(*tgt, 0, max);
+        float diff = *tgt - *pos;
+        *pos = fabsf(diff) < 0.3f ? *tgt : approach(*pos, *tgt, 13, dt);
+    }
 }

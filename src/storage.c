@@ -194,9 +194,9 @@ void storage_frame(float dt) {
     }
     float rh = 58, ly = 128;
     long long maxb = items[0].bytes > 0 ? items[0].bytes : 1;
-    sy_t = fmaxf(0, sel * (rh + 6) - 160);
-    if (in.dragging) { sy -= in.ddy; sy_t = sy; }
-    if (!in.touching) sy = approach(sy, sy_t, 12, dt);
+    if ((in.repeat & (B_UP | B_DOWN | B_LEFT | B_RIGHT))) sy_t = fmaxf(0, sel * (rh + 6) - 160);
+    static KScroll sks;
+    kscroll(&sy, &sy_t, &sks, nitems * (rh + 6) - (SCR_H - ly) + 30, in.dragging, in.ddy, in.vy, dt);
     gfx_clip(0, ly - 4, SCR_W, SCR_H - ly + 4);
     for (int i = 0; i < nitems; i++) {
         float y = ly + i * (rh + 6) - sy;

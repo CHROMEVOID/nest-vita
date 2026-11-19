@@ -266,11 +266,12 @@ void picker_frame(float dt) {
     /* list */
     float top = 100, rh = 52;
     float fy = focus * rh;
-    if (fy - psy_t > SCR_H - top - rh * 2) psy_t = fy - (SCR_H - top - rh * 2);
-    if (fy - psy_t < rh) psy_t = fmaxf(0, fy - rh);
-    if (in.dragging) { psy -= in.ddy; psy_t = psy; }
-    psy_t = clampf(psy_t, 0, fmaxf(0, nents * rh - (SCR_H - top - 40)));
-    if (!in.touching) psy = approach(psy, psy_t, 12, dt);
+    if ((in.repeat & (B_UP | B_DOWN | B_LEFT | B_RIGHT))) {
+        if (fy - psy_t > SCR_H - top - rh * 2) psy_t = fy - (SCR_H - top - rh * 2);
+        if (fy - psy_t < rh) psy_t = fmaxf(0, fy - rh);
+    }
+    static KScroll pks;
+    kscroll(&psy, &psy_t, &pks, nents * rh - (SCR_H - top - 40), in.dragging, in.ddy, in.vy, dt);
     gfx_clip(0, top, SCR_W, SCR_H - top);
     for (int i = 0; i < nents; i++) {
         float y = top + i * rh - psy;

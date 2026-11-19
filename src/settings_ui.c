@@ -456,10 +456,9 @@ void settings_frame(float dt) {
         if (i == ri) fy = y;
         y += row_h(&rows[i]) + 6;
     }
-    rsy_t = fmaxf(0, fy - 200);
-    rsy_t = fminf(rsy_t, fmaxf(0, y - SCR_H + 30));
-    if (in.dragging && in.sx > 250) { rsy -= in.ddy; rsy_t = rsy; }
-    if (!in.touching) rsy = approach(rsy, rsy_t, 12, dt);
+    if ((in.repeat & (B_UP | B_DOWN | B_LEFT | B_RIGHT))) rsy_t = fmaxf(0, fy - 200);
+    static KScroll sks;
+    kscroll(&rsy, &rsy_t, &sks, y - SCR_H + 30, in.dragging && in.sx > 250, in.ddy, in.vy, dt);
     text(F_META, 12, px, 30 - rsy, T->text3, CAT_NAMES[cat]);
     y = 44 - rsy;
     for (int i = 0; i < nrows; i++) {

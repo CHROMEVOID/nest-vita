@@ -215,9 +215,9 @@ void history_frame(float dt) {
         text_wrap(F_REG, 14, lx, 130, lw, 20, 3, T->text3, "Nothing yet. Everything you play or read appears here with the time you were on it.");
         return;
     }
-    sy_t = fmaxf(0, sel * (rh + 6) - 150);
-    if (in.dragging && in.sx > lx) { sy -= in.ddy; sy_t = sy; }
-    if (!in.touching) sy = approach(sy, sy_t, 12, dt);
+    if ((in.repeat & (B_UP | B_DOWN | B_LEFT | B_RIGHT))) sy_t = fmaxf(0, sel * (rh + 6) - 150);
+    static KScroll hks;
+    kscroll(&sy, &sy_t, &hks, nrows * (rh + 6) - (SCR_H - 108) + 30, in.dragging && in.sx > lx, in.ddy, in.vy, dt);
     gfx_clip(lx - 8, 104, lw + 16, SCR_H - 104);
     for (int i = 0; i < nrows; i++) {
         float y = 108 + i * (rh + 6) - sy;

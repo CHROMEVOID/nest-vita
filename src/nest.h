@@ -114,6 +114,12 @@ void input_update(float dt);
 int hit(float x, float y, float w, float h); /* tap landed in rect */
 int hit_long(float x, float y, float w, float h);
 int touch_in(float x, float y, float w, float h);
+/* iPhone-style scrolling. pos/tgt are a screen's scroll position and where the d-pad wants it.
+   grab: this list owns the finger right now; d: finger movement on its axis (in.ddy or in.ddx);
+   v: release speed on that axis (in.vy or in.vx). Follows the finger exactly, a flick glides
+   and slows down by itself, and the ends stretch a little and spring back. */
+typedef struct { float vel; int held; } KScroll;
+void kscroll(float *pos, float *tgt, KScroll *k, float max, int grab, float d, float v, float dt);
 void input_consume_touch(void);
 
 /* ---------------- theme.c ---------------- */

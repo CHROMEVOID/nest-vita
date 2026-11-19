@@ -334,15 +334,15 @@ void detail_frame(float dt) {
     float row_h = 64;
     float list_y = list_top + (nseasons > 1 ? 52 : 8);
     float more_y = (has_list ? list_y + nents * row_h + 24 : 380);
-    if (zone == 0) dsy_t = 0;
-    else if (zone == 1) dsy_t = list_top - 200;
-    else if (zone == 2) dsy_t = list_y + ei * row_h - 230;
-    else dsy_t = more_y - 220;
-    if (in.dragging) { dsy -= in.ddy; dsy_t = dsy; }
-    if (in.released) dsy_t = dsy - in.vy * 0.25f;
-    float maxs = fmaxf(0, more_y + (nmore ? 300 : 40) - SCR_H);
-    dsy_t = clampf(dsy_t, 0, maxs);
-    if (!in.touching) dsy = approach(dsy, dsy_t, 10, dt);
+    /* the d-pad moves the page to what's focused; a finger moves it freely and it stays put */
+    if ((in.repeat & (B_UP | B_DOWN | B_LEFT | B_RIGHT)) || (in.pressed & (B_OK | B_BACK))) {
+        if (zone == 0) dsy_t = 0;
+        else if (zone == 1) dsy_t = list_top - 200;
+        else if (zone == 2) dsy_t = list_y + ei * row_h - 230;
+        else dsy_t = more_y - 220;
+    }
+    static KScroll dks;
+    kscroll(&dsy, &dsy_t, &dks, fmaxf(0, more_y + (nmore ? 300 : 40) - SCR_H), in.dragging, in.ddy, in.vy, dt);
     efsel = approach(efsel, (float)ei, 18, dt);
     mfsel = approach(mfsel, (float)mi, 18, dt);
 

@@ -909,6 +909,15 @@ extern volatile int g_mus_started_track; /* set by the engine when a song begins
 
 void music_frame(float dt) {
     mus_state_tick(dt);
+    {
+        static float since;
+        static int started;
+        since += dt;
+        if (!started && since > 4.0f) {
+            started = 1;
+            if (!M.scanning) music_scan_start();
+        }
+    }
     if (M.scanning && scan_done) {
         if (scan_th >= 0) {
             SceUInt to = 1000000;
@@ -966,7 +975,7 @@ void music_init(void) {
     sceIoMkdir(ART_DIR, 0777);
     music_reload();
     mus_state_restore();
-    music_scan_start(); /* quietly pick up new songs every launch */
+    /* the search for new songs starts a few seconds after launch, so opening Nest stays quick */
 }
 
 /* ---------------- search ---------------- */

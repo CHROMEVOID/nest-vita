@@ -221,9 +221,77 @@ static uint8_t *decode_mem(const uint8_t *buf, size_t len, int maxw, int maxh, i
     return px;
 }
 
+/* ---- the picture cache: images already shrunk to the size they're shown at ----
+   ux0:data/Nest/cache/<hash>_<w>x<h>.px holds a small header and the raw pixels.
+   The header remembers the original file's size and date, so a new poster
+   (from Nest Metadata, say) is picked up straight away. */
+#include <psp2/io/stat.h>
+#define PX_DIR DATA_DIR "/cache"
+typedef struct {
+    uint32_t magic, w, h, pad;
+    int64_t src_size, src_mtime;
+} PxHead;
+static unsigned px_hash(const char *s) {
+    unsigned h = 2166136261u;
+    for (; *s; s++) h = (h ^ (unsigned char)*s) * 16777619u;
+    return h;
+}
+static int src_stat(const char *src, int64_t *size, int64_t *mt) {
+    SceIoStat st;
+    if (sceIoGetstat(src, &st) < 0) return 0;
+    *size = st.st_size;
+    *mt = (int64_t)st.st_mtime.year * 10000000000LL + (int64_t)st.st_mtime.month * 100000000LL +
+          (int64_t)st.st_mtime.day * 1000000LL + st.st_mtime.hour * 10000 + st.st_mtime.minute * 100 + st.st_mtime.second;
+    return 1;
+}
+static void px_path(const char *src, int maxw, int maxh, char *out, int n) {
+    snprintf(out, n, PX_DIR "/%08x_%dx%d.px", px_hash(src), maxw, maxh);
+}
+static uint8_t *px_load(const char *src, int maxw, int maxh, int *ow, int *oh) {
+    int64_t sz, mt;
+    if (!src_stat(src, &sz, &mt)) return NULL;
+    char p[160];
+    px_path(src, maxw, maxh, p, sizeof(p));
+    FILE *f = fopen(p, "rb");
+    if (!f) return NULL;
+    PxHead hd;
+    uint8_t *px = NULL;
+    if (fread(&hd, sizeof(hd), 1, f) == 1 && hd.magic == 0x3158504E && hd.src_size == sz && hd.src_mtime == mt &&
+        hd.w > 0 && hd.h > 0 && hd.w <= 2048 && hd.h <= 2048) {
+        px = malloc((size_t)hd.w * hd.h * 4);
+        if (px && fread(px, 4, (size_t)hd.w * hd.h, f) != (size_t)hd.w * hd.h) { free(px); px = NULL; }
+        if (px) { *ow = hd.w; *oh = hd.h; }
+    }
+    fclose(f);
+    return px;
+}
+static void px_save(const char *src, int maxw, int maxh, const uint8_t *px, int w, int h) {
+    static int made;
+    if (!made) { sceIoMkdir(PX_DIR, 0777); made = 1; }
+    int64_t sz, mt;
+    if (!src_stat(src, &sz, &mt)) return;
+    char p[160], tmp[170];
+    px_path(src, maxw, maxh, p, sizeof(p));
+    snprintf(tmp, sizeof(tmp), "%s.part", p);
+    FILE *f = fopen(tmp, "wb");
+    if (!f) return;
+    PxHead hd = {0x3158504E, (uint32_t)w, (uint32_t)h, 0, sz, mt};
+    int ok = fwrite(&hd, sizeof(hd), 1, f) == 1 && fwrite(px, 4, (size_t)w * h, f) == (size_t)w * h;
+    fclose(f);
+    if (ok) { sceIoRemove(p); sceIoRename(tmp, p); }
+    else sceIoRemove(tmp);
+}
+
 uint8_t *img_decode_file(const char *src, int maxw, int maxh, int *ow, int *oh) {
     size_t len = 0;
     void *buf = NULL;
+    /* plain files on the card: try the cache first */
+    int cacheable = strncmp(src, "cover:", 6) && strncmp(src, "arc:", 4) && !net_is_url(src) && strncmp(src, "app0:", 5) &&
+                    maxw * maxh <= 1024 * 600;
+    if (cacheable) {
+        uint8_t *c = px_load(src, maxw, maxh, ow, oh);
+        if (c) return c;
+    }
     if (!strncmp(src, "cover:", 6)) {
         buf = book_cover(src + 6, &len);
     } else if (!strncmp(src, "arc:", 4)) {
@@ -242,6 +310,7 @@ uint8_t *img_decode_file(const char *src, int maxw, int maxh, int *ow, int *oh) 
     if (!buf) return NULL;
     uint8_t *px = decode_mem(buf, len, maxw, maxh, ow, oh);
     free(buf);
+    if (px && cacheable) px_save(src, maxw, maxh, px, *ow, *oh);
     return px;
 }
 
@@ -339,8 +408,11 @@ static int worker(SceSize args, void *argp) {
 void img_init(void) {
     mtx = sceKernelCreateMutex("nest_img", 0, 0, NULL);
     sema = sceKernelCreateSema("nest_img_s", 0, 0, 64, NULL);
-    SceUID th = sceKernelCreateThread("nest_img", worker, 0x10000110, 512 * 1024, 0, 0x20000 /* core 1: never slows the screen */, NULL);
+    /* two loaders on the cores that don't draw the screen */
+    SceUID th = sceKernelCreateThread("nest_img", worker, 0x10000110, 512 * 1024, 0, 0x20000, NULL);
     if (th >= 0) sceKernelStartThread(th, 0, NULL);
+    SceUID th2 = sceKernelCreateThread("nest_img2", worker, 0x10000110, 512 * 1024, 0, 0x40000, NULL);
+    if (th2 >= 0) sceKernelStartThread(th2, 0, NULL);
 }
 
 static int gpu_waited; /* one GPU wait per frame end, not one per texture */
@@ -417,7 +489,7 @@ vita2d_texture *img_get(const char *src, int w, int h, float *fade) {
     }
     s->last_frame = frame_no;
     s->drop = 0;
-    if (s->state == ST_DECODED && uploads_this_frame < 2) {
+    if (s->state == ST_DECODED && uploads_this_frame < 3) {
         uint8_t *px = s->rgba;
         int rw = s->rw, rh = s->rh;
         s->rgba = NULL;
@@ -434,7 +506,7 @@ vita2d_texture *img_get(const char *src, int w, int h, float *fade) {
         total_bytes += s->bytes;
     }
     vita2d_texture *t = s->state == ST_READY ? s->tex : NULL;
-    if (t && fade) *fade = clampf((g_time - s->born) / 0.35f, 0, 1);
+    if (t && fade) *fade = clampf((g_time - s->born) / 0.2f, 0, 1);
     unlock();
     return t;
 }

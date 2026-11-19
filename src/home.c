@@ -20,6 +20,7 @@ typedef struct {
     int n, col;
     float sx, sx_t, fsel;
     float y, h;
+    KScroll ks;
 } Row;
 
 static Row rows[MAXROWS];
@@ -29,6 +30,7 @@ static float tab_anim = 1;
 static int frow = 0;        /* focused row; -1 = navigation */
 static int nav_i;           /* 0..4 tabs, 5 search, 6 settings */
 static float sy, sy_t;      /* vertical scroll */
+static KScroll hks, gks;
 static float row_focus_anim[MAXROWS];
 static int hero[8], nhero, hero_i, hero_prev = -1;
 static float hero_timer, hero_fade = 1, idle;
@@ -518,7 +520,10 @@ static void draw_rows(float dt) {
         int focused = frow == ri;
         row_focus_anim[ri] = approach(row_focus_anim[ri], focused ? 1 : 0, 14, dt);
         r->fsel = approach(r->fsel, (float)r->col, S.reduce_motion ? 40 : 18, dt);
-        if (!in.dragging || touch_row != ri) r->sx = approach(r->sx, r->sx_t, S.ambient ? 7 : 11, dt);
+        {
+            float iw = item_w(r), ig = gap();
+            kscroll(&r->sx, &r->sx_t, &r->ks, r->n * (iw + ig) - ig - (SCR_W - MARGIN * 2), touch_axis == 2 && touch_row == ri, in.ddx, in.vx, dt);
+        }
         /* label */
         int ls = T->display_font == 1 ? 19 : 17;
         int lf = T->display_font == 1 ? F_DISPLAY : F_SEMI;
@@ -670,28 +675,8 @@ static void home_touch(float dt) {
                 if (touch_row < 0) touch_axis = 1;
             }
         }
-        if (touch_axis == 1) {
-            sy -= in.ddy;
-            sy_t = sy;
-        } else if (touch_row >= 0) {
-            Row *r = &rows[touch_row];
-            r->sx -= in.ddx;
-            r->sx_t = r->sx;
-        }
     }
-    if (in.released) {
-        if (touch_axis == 1) sy_t = sy - in.vy * 0.28f;
-        else if (touch_axis == 2 && touch_row >= 0) {
-            Row *r = &rows[touch_row];
-            float w = item_w(r), g = gap();
-            r->sx_t = r->sx - in.vx * 0.3f;
-            float maxs = fmaxf(0, r->n * (w + g) - g - (SCR_W - MARGIN * 2));
-            r->sx_t = clampf(r->sx_t, 0, maxs);
-            /* keep focus on something visible */
-            r->col = clampi((int)((r->sx_t + (w + g) * 0.5f) / (w + g)), 0, r->n - 1);
-        }
-        touch_axis = 0;
-    }
+    if (in.released) touch_axis = 0; /* the scrollers glide on by themselves */
 }
 
 static void draw_home(float dt) {
@@ -701,15 +686,11 @@ static void draw_home(float dt) {
     home_input();
     home_touch(dt);
     /* vertical scroll follows focus */
-    if (!in.dragging) {
-        if (in.repeat & (B_UP | B_DOWN)) {
-            if (frow <= 0) sy_t = 0;
-            else sy_t = rows[frow].y - 84;
-        }
-        float maxs = fmaxf(0, content_h() - SCR_H + 10);
-        sy_t = clampf(sy_t, 0, maxs);
-        if (!in.touching) sy = approach(sy, sy_t, S.ambient ? 6 : 10, dt);
+    if (in.repeat & (B_UP | B_DOWN)) {
+        if (frow <= 0) sy_t = 0;
+        else sy_t = rows[frow].y - 84;
     }
+    kscroll(&sy, &sy_t, &hks, fmaxf(0, content_h() - SCR_H + 10), touch_axis == 1, in.ddy, in.vy, dt);
     draw_hero(roundf(-sy), dt, frow == 0); /* moves with the shelves: nothing slides over its buttons */
     /* the hero gently dims away as the shelves scroll up */
     float hero_bottom = HERO_H - sy;
@@ -774,15 +755,9 @@ static void draw_grid(float dt) {
     }
     int row = gfocus / cols;
     if (!in.dragging && (in.repeat & (B_UP | B_DOWN))) gsy_t = row * cell_h - (row > 0 ? cell_h * 0.5f : 0);
-    if (in.dragging) {
-        gsy -= in.ddy;
-        gsy_t = gsy;
-    }
-    if (in.released) gsy_t = gsy - in.vy * 0.28f;
     int nrows_g = (gn + cols - 1) / cols;
-    float maxs = fmaxf(0, nrows_g * cell_h - (SCR_H - top) + 30);
-    gsy_t = clampf(gsy_t, 0, maxs);
-    if (!in.touching) gsy = approach(gsy, gsy_t, 11, dt);
+    float maxs = fmaxf(0, nrows_g * cell_h - (SCR_H - top) + 30 + miniplayer_height());
+    kscroll(&gsy, &gsy_t, &gks, maxs, in.dragging, in.ddy, in.vy, dt);
     gfsel = approach(gfsel, (float)gfocus, 20, dt);
 
     /* header */
