@@ -251,7 +251,10 @@ static void set_tab(int t) {
 static void draw_nav(float dt, float alpha) {
     float scrolled = clampf((tab == TAB_HOME || tab == TAB_SECRET ? sy : gsy) / 60.0f, 0, 1);
     gfx_grad_v(0, 0, SCR_W, 92, col_a(T->bg, 0.55f + 0.4f * scrolled), col_a(T->bg, 0));
-    if (scrolled > 0) gfx_rect(0, 0, SCR_W, 58, col_a(T->bg, 0.5f * scrolled));
+    if (scrolled > 0) {
+        gfx_rect(0, 0, SCR_W, 66, col_a(T->bg, 0.97f * scrolled));
+        gfx_grad_v(0, 66, SCR_W, 22, col_a(T->bg, 0.97f * scrolled), col_a(T->bg, 0));
+    }
     /* wordmark */
     text(F_DISPLAY, T->display_font == 2 ? 22 : 25, MARGIN, 40, col_a(T->text, alpha), "nest");
     float wm = text_w(F_DISPLAY, T->display_font == 2 ? 22 : 25, "nest");
@@ -371,8 +374,9 @@ static void draw_hero(float y0, float dt, int focused) {
     Title *t = &L.t[hero[hero_i]];
     /* rotation */
     if (S.hero_rotate && nhero > 1 && !S.reduce_motion) {
-        idle = in.any ? 0 : idle + dt;
-        hero_timer += dt;
+        int calm = !in.any && fabsf(sy) < 2 && fabsf(sy_t) < 2 && !hks.held && hks.vel == 0;
+        idle = calm ? idle + dt : 0;
+        if (calm) hero_timer += dt; /* the clock only runs while the hero is fully on screen and still */
         int nx = (hero_i + 1) % nhero;
         Title *tn = &L.t[hero[nx]];
         const char *nsrc = tn->backdrop ? tn->backdrop : tn->poster;
@@ -382,7 +386,7 @@ static void draw_hero(float y0, float dt, int focused) {
             next_ready = img_get(nsrc, SCR_W, (int)HERO_H, &f2) != NULL;
             if (tn->logo) next_ready &= img_get(tn->logo, 380, 120, &f2) != NULL;
         }
-        if (hero_timer > 10 && (idle > 4 || !focused) && next_ready && hero_fade >= 1) {
+        if (hero_timer > 10 && idle > 3 && next_ready && hero_fade >= 1) {
             hero_prev = hero_i;
             hero_i = nx;
             hero_timer = 0;
@@ -940,7 +944,7 @@ void main_frame(float dt) {
         static const char *hints[] = {"OK", "Open", "TRI", "Options", "L", "R", "SELECT", "Search"};
         (void)hints;
         static const char *h2[] = {"OK", "Open", "TRI", "Options", "SQR", "Favorite"};
-        if ((tab != TAB_SECRET || g_secret_unlocked) && tab != TAB_MUSIC && !miniplayer_height()) {
+        if (0) { /* hints covered posters while scrolling: the buttons are in the guide instead */
             float a = (tab == TAB_HOME || tab == TAB_SECRET) ? clampf(sy / 80.0f, 0, 1) : 1;
             if (a > 0.05f) {
                 gfx_grad_v(0, SCR_H - 46, SCR_W, 46, col_a(T->bg, 0), col_a(T->bg, 0.9f * a));
