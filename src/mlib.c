@@ -427,6 +427,9 @@ static char roots[24][512];
 static int roots_ok[24], roots_songs[24], roots_picked[24];
 static int rescan_after; /* a scan was asked for while one was running */
 static int last_nroots;
+/* the report shown on the Music screen: copied only from a search that finished */
+static char rep_roots[24][512];
+static int rep_ok[24], rep_songs[24], rep_picked[24], rep_n;
 static int nroots;
 static volatile int scan_done, scan_cancel;
 static SceUID scan_th = -1;
@@ -584,11 +587,10 @@ static int scan_thread(SceSize a, void *p) {
         SceIoStat st;
         size_t rl = strlen(roots[i]);
         int is_dev = rl && roots[i][rl - 1] == ':';
-        roots_ok[i] = is_dev ? 1 : sceIoGetstat(roots[i], &st) >= 0;
-        if (!roots_ok[i]) {
-            SceUID dd = sceIoDopen(roots[i]); /* some drivers can't stat a folder but can open it */
-            if (dd >= 0) { roots_ok[i] = 1; sceIoDclose(dd); }
-        }
+        roots_ok[i] = 0;
+        SceUID dd = sceIoDopen(roots[i]); /* exactly how the film scanner opens folders */
+        if (dd >= 0) { roots_ok[i] = 1; sceIoDclose(dd); }
+        else if (!is_dev && sceIoGetstat(roots[i], &st) >= 0) roots_ok[i] = 1;
         int before = nfound;
         if (roots_ok[i] && !scan_cancel) walk(roots[i], 0);
         roots_songs[i] = nfound - before;
@@ -668,12 +670,15 @@ void music_scan_start(void) {
     nartimg = 0;
     scan_done = 0;
     scan_cancel = 0;
+    for (int i = 0; i < 24; i++) roots_ok[i] = roots_songs[i] = 0;
     M.scanning = 1;
     M.scan_found = 0;
     scan_th = sceKernelCreateThread("nest_mscan", scan_thread, 0x10000100 + 30, 0x80000, 0, 0x40000, NULL); /* tag reading uses big buffers */
     if (scan_th < 0 || sceKernelStartThread(scan_th, 0, NULL) < 0) {
+        if (scan_th >= 0) sceKernelDeleteThread(scan_th);
         M.scanning = 0;
         scan_th = -1;
+        rescan_after = 1; /* try again in a moment (the last search may still be closing) */
     }
 }
 
@@ -906,7 +911,7 @@ void music_frame(float dt) {
     mus_state_tick(dt);
     if (M.scanning && scan_done) {
         if (scan_th >= 0) {
-            SceUInt to = 100000;
+            SceUInt to = 1000000;
             sceKernelWaitThreadEnd(scan_th, NULL, &to);
             scan_th = -1;
         }
@@ -915,8 +920,16 @@ void music_frame(float dt) {
         if (scan_cancel) { /* stopped half way: keep everything as it was */
             for (int i = 0; i < nfound; i++) free(found[i].path);
             nfound = 0;
-        } else
+        } else {
+            rep_n = nroots;
+            for (int i = 0; i < nroots; i++) {
+                snprintf(rep_roots[i], 512, "%s", roots[i]);
+                rep_ok[i] = roots_ok[i];
+                rep_songs[i] = roots_songs[i];
+                rep_picked[i] = roots_picked[i];
+            }
             scan_commit();
+        }
         M.scanning = 0;
         if (rescan_after) {
             rescan_after = 0;
@@ -1167,8 +1180,12 @@ int music_recents(int *kinds, int *idx, int max) {
 
 /* ---------------- music folders you pick ---------------- */
 
-void music_add_root(const char *path) {
-    if (!path || !path[0]) return;
+void music_add_root(const char *path_in) {
+    if (!path_in || !path_in[0]) return;
+    char path[512];
+    snprintf(path, sizeof(path), "%s", path_in);
+    size_t pl = strlen(path);
+    while (pl > 1 && path[pl - 1] == '/' && path[pl - 2] != ':') path[--pl] = 0;
     char k[600];
     snprintf(k, sizeof(k), "music_root:%s", path);
     db_set(k, path);
@@ -1210,10 +1227,10 @@ int music_roots(char out[][512], int max) {
 
 int music_report(char lines[][160], int max) {
     int n = 0;
-    for (int i = 0; i < last_nroots && n < max; i++) {
-        if (!roots_ok[i] && !roots_picked[i]) continue; /* the usual places that just aren't there: not interesting */
-        if (!roots_ok[i]) snprintf(lines[n++], 160, "%s  \xc2\xb7  can't open this folder", roots[i]);
-        else snprintf(lines[n++], 160, "%s  \xc2\xb7  %d song%s", roots[i], roots_songs[i], roots_songs[i] == 1 ? "" : "s");
+    for (int i = 0; i < rep_n && n < max; i++) {
+        if (!rep_ok[i] && !rep_picked[i]) continue; /* the usual places that just aren't there: not interesting */
+        if (!rep_ok[i]) snprintf(lines[n++], 160, "%s  \xc2\xb7  can't open this folder", rep_roots[i]);
+        else snprintf(lines[n++], 160, "%s  \xc2\xb7  %d song%s", rep_roots[i], rep_songs[i], rep_songs[i] == 1 ? "" : "s");
     }
     return n;
 }
