@@ -460,6 +460,14 @@ void detail_frame(float dt) {
         text(F_REG, 13, x + 22, bty + 75, T->text2, "Vita's video chip plays MP4 (H.264). Convert this file to watch it here.");
     }
 
+    /* the seasons and episodes sit on a sheet that slides up over the backdrop */
+    if (has_list || nmore) {
+        float sheet = y0 + list_top - 26;
+        if (sheet < SCR_H) {
+            gfx_grad_v(0, sheet - 60, SCR_W, 60, col_a(T->bg, 0), col_a(T->bg, 0.85f));
+            gfx_rect(0, sheet, SCR_W, SCR_H - sheet + 2, col_a(T->bg, 0.96f));
+        }
+    }
     /* seasons */
     if (nseasons > 1) {
         float cx = DM, cy = y0 + list_top;
@@ -494,8 +502,15 @@ void detail_frame(float dt) {
             float tw2 = 120, th2 = 68, tx2 = DM, ty2 = ry + (row_h - th2) / 2;
             float tr = T->radius_sm;
             if (bg && fade >= 1) {
-                float ax = fmodf(0.13f + e->number * 0.29f + e->season * 0.17f, 1.0f);
-                gfx_tex(bg, tx2, ty2, tw2, th2, tr, col_a(0xFFFFFFFF, e->finished && !is_resume ? 0.55f : 0.95f), ax, 0.45f);
+                /* zoom in 2.6x and pan to a different spot per episode, so no two tiles look alike */
+                unsigned hsh = (unsigned)(e->number * 2654435761u) ^ (unsigned)(e->season * 40503u);
+                float zx = (hsh % 1000) / 1000.0f, zy = ((hsh / 1000) % 1000) / 1000.0f;
+                float zw = tw2 * 2.6f, zh = th2 * 2.6f;
+                gfx_clip(tx2, fmaxf(ty2, 0), tw2, th2);
+                gfx_tex(bg, tx2 - (zw - tw2) * zx, ty2 - (zh - th2) * (0.15f + zy * 0.7f), zw, zh, 0,
+                        col_a(0xFFFFFFFF, e->finished && !is_resume ? 0.55f : 0.95f), 0.5f, 0.4f);
+                gfx_noclip();
+                gfx_rrect_outline(tx2, ty2, tw2, th2, tr, 2, col_a(T->bg, 1)); /* round the corners off */
             } else {
                 gfx_rrect_grad(tx2, ty2, tw2, th2, tr, col_mix(T->surface2, T->accent, 0.18f), col_mix(T->surface, 0xFF000000, 0.2f));
             }
@@ -562,9 +577,16 @@ void detail_frame(float dt) {
             if (hit(px, my + 34, w, h)) detail_open(L.t[more[i]].id);
         }
     }
-    static const char *hints[] = {"OK", "Select", "TRI", "Options", "SQR", "Favorite", "BACK", "Back"};
-    gfx_grad_v(0, SCR_H - 44, SCR_W, 44, col_a(T->bg, 0), col_a(T->bg, 0.92f));
-    draw_hint_bar(hints, 8);
+    {
+        float k = clampf((dsy - 220) / 80.0f, 0, 1);
+        if (k > 0.01f) {
+            gfx_rect(0, 0, SCR_W, 58, col_a(T->bg, 0.97f * k));
+            gfx_grad_v(0, 58, SCR_W, 18, col_a(T->bg, 0.97f * k), col_a(T->bg, 0));
+            icon(IC_CHEVRON_L, DM + 17, 30, 20, col_a(T->text, k));
+            text_ellipsis(F_SEMI, 16, DM + 44, 36, SCR_W - DM * 2 - 60, col_a(T->text, k), t->title);
+            if (hit(0, 0, 160, 58)) nav_pop();
+        }
+    }
 }
 
 /* ---------------- spotlight ---------------- */
