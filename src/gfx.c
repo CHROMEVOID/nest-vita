@@ -288,6 +288,22 @@ void gfx_tex(vita2d_texture *tex, float x, float y, float w, float h, float r, c
     vita2d_draw_array_textured(tex, SCE_GXM_PRIMITIVE_TRIANGLE_FAN, v, n + 2, tint);
 }
 
+/* a rounded rect showing just part of a texture: u0..u1, v0..v1 in 0..1 */
+void gfx_tex_uv(vita2d_texture *tex, float x, float y, float w, float h, float r, float u0, float v0, float u1, float v1, col_t tint) {
+    if (!tex || w <= 0 || h <= 0) return;
+    float px[MAXP], py[MAXP];
+    int n = rr_points(x, y, w, h, r, px, py);
+    vita2d_texture_vertex *v =
+        vita2d_pool_memalign((n + 2) * sizeof(vita2d_texture_vertex), sizeof(vita2d_texture_vertex));
+    if (!v) return;
+    v[0] = (vita2d_texture_vertex){x + w / 2, y + h / 2, 0.5f, (u0 + u1) / 2, (v0 + v1) / 2};
+    for (int i = 0; i <= n; i++) {
+        int k = i % n;
+        v[i + 1] = (vita2d_texture_vertex){px[k], py[k], 0.5f, u0 + (px[k] - x) / w * (u1 - u0), v0 + (py[k] - y) / h * (v1 - v0)};
+    }
+    vita2d_draw_array_textured(tex, SCE_GXM_PRIMITIVE_TRIANGLE_FAN, v, n + 2, tint);
+}
+
 void gfx_tex_fit(vita2d_texture *tex, float x, float y, float w, float h, col_t tint) {
     if (!tex) return;
     float tw = vita2d_texture_get_width(tex), th = vita2d_texture_get_height(tex);

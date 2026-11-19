@@ -63,6 +63,7 @@ void gfx_line(float x0, float y0, float x1, float y1, float t, col_t c);
 /* textured, rounded, "cover" crop (ax/ay = focus point 0..1) */
 void gfx_tex(vita2d_texture *tex, float x, float y, float w, float h, float r, col_t tint, float ax, float ay);
 void gfx_tex_fit(vita2d_texture *tex, float x, float y, float w, float h, col_t tint);
+void gfx_tex_uv(vita2d_texture *tex, float x, float y, float w, float h, float r, float u0, float v0, float u1, float v1, col_t tint);
 void gfx_clip(float x, float y, float w, float h);
 /* frosted glass: see-through tinted panel, glossy sheen, light rim, soft shadow (a = opacity) */
 void gfx_glass(float x, float y, float w, float h, float r, float a);

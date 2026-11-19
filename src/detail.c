@@ -505,12 +505,11 @@ void detail_frame(float dt) {
                 /* zoom in 2.6x and pan to a different spot per episode, so no two tiles look alike */
                 unsigned hsh = (unsigned)(e->number * 2654435761u) ^ (unsigned)(e->season * 40503u);
                 float zx = (hsh % 1000) / 1000.0f, zy = ((hsh / 1000) % 1000) / 1000.0f;
-                float zw = tw2 * 2.6f, zh = th2 * 2.6f;
-                gfx_clip(tx2, fmaxf(ty2, 0), tw2, th2);
-                gfx_tex(bg, tx2 - (zw - tw2) * zx, ty2 - (zh - th2) * (0.15f + zy * 0.7f), zw, zh, 0,
-                        col_a(0xFFFFFFFF, e->finished && !is_resume ? 0.55f : 0.95f), 0.5f, 0.4f);
-                gfx_noclip();
-                gfx_rrect_outline(tx2, ty2, tw2, th2, tr, 2, col_a(T->bg, 1)); /* round the corners off */
+                /* a window 1/2.6 of the picture's size, in the picture's own shape */
+                float bw2 = vita2d_texture_get_width(bg), bh2 = vita2d_texture_get_height(bg);
+                float uw = 1 / 2.6f, vh2 = fminf(1.0f, uw * (bw2 / bh2) * (th2 / tw2));
+                float u0 = (1 - uw) * zx, v0 = (1 - vh2) * (0.15f + zy * 0.7f);
+                gfx_tex_uv(bg, tx2, ty2, tw2, th2, tr, u0, v0, u0 + uw, v0 + vh2, col_a(0xFFFFFFFF, e->finished && !is_resume ? 0.55f : 0.95f));
             } else {
                 gfx_rrect_grad(tx2, ty2, tw2, th2, tr, col_mix(T->surface2, T->accent, 0.18f), col_mix(T->surface, 0xFF000000, 0.2f));
             }
