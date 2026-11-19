@@ -395,7 +395,7 @@ static void handle_videos(Walk *w, const char *dir, int depth, DList *l) {
 
         if (w->mode_folder) {
             const char *name = w->folder_name[0] ? w->folder_name : "Unsorted";
-            ScanTitle *t = get_title(r, w->folder_key[0] ? w->folder_key : "xf:root", KIND_SERIES, 1, name, 0);
+            ScanTitle *t = get_title(r, w->folder_key[0] ? w->folder_key : (w->secret ? "xf:root" : "f:root"), KIND_SERIES, w->secret, name, 0);
             if (!t) continue;
             char nice[256];
             parse_clean(de->name, nice, sizeof(nice), NULL, NULL);
@@ -514,8 +514,8 @@ static void handle_books(Walk *w, const char *dir, int depth, DList *l) {
         if (w->mode_folder) {
             const char *name = w->folder_name[0] ? w->folder_name : "Unsorted";
             char key[320];
-            snprintf(key, sizeof(key), "%sb", w->folder_key[0] ? w->folder_key : "xf:root");
-            ScanTitle *t = get_title(r, key, KIND_BOOK, 1, name, 0);
+            snprintf(key, sizeof(key), "%sb", w->folder_key[0] ? w->folder_key : (w->secret ? "xf:root" : "f:root"));
+            ScanTitle *t = get_title(r, key, KIND_BOOK, w->secret, name, 0);
             if (!t) continue;
             ParsedName p;
             parse_book(de->name, &p);
@@ -571,7 +571,7 @@ static void walk(Walk *w, const char *dir, int depth) {
         if (is_excluded(sub)) continue;
         if (w->mode_folder && depth == 0) {
             snprintf(w->folder_name, sizeof(w->folder_name), "%s", l.v[i].name);
-            snprintf(w->folder_key, sizeof(w->folder_key), "xf:%s", sub);
+            snprintf(w->folder_key, sizeof(w->folder_key), "%sf:%s", w->secret ? "x" : "", sub);
         }
         walk(w, sub, depth + 1);
         if (w->mode_folder && depth == 0) {
@@ -591,7 +591,7 @@ void scan_folder(const char *root, int secret, int mode_folder, ScanResult *r) {
     w->mode_folder = mode_folder;
     if (mode_folder) {
         parse_clean(path_basename(root), w->folder_name, sizeof(w->folder_name), NULL, NULL);
-        snprintf(w->folder_key, sizeof(w->folder_key), "xf:%s", root);
+        snprintf(w->folder_key, sizeof(w->folder_key), "%sf:%s", secret ? "x" : "", root);
     }
     walk(w, root, 0);
     free(w);

@@ -182,7 +182,7 @@ void thumb_tick(float dt, int allowed) {
     if (!active) {
         /* wait for a calm moment: no input for a little while */
         idle_frames = in.any ? 0 : idle_frames + 1;
-        if (idle_frames < 45) return;
+        if (idle_frames < 240) return; /* only when you have really stopped: opening a video stalls a frame */
         int e = pick_next();
         if (e < 0) return;
         sceSysmoduleLoadModule(SCE_SYSMODULE_AVPLAYER);

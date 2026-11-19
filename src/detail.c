@@ -331,7 +331,7 @@ void detail_frame(float dt) {
 
     /* ---------- layout + scrolling ---------- */
     float list_top = 400;
-    float row_h = 64;
+    float row_h = 84;
     float list_y = list_top + (nseasons > 1 ? 52 : 8);
     float more_y = (has_list ? list_y + nents * row_h + 24 : 380);
     /* the d-pad moves the page to what's focused; a finger moves it freely and it stays put */
@@ -347,14 +347,14 @@ void detail_frame(float dt) {
     mfsel = approach(mfsel, (float)mi, 18, dt);
 
     /* ---------- backdrop ---------- */
-    float bgh = 420;
+    float bgh = 470;
     float fade = 0;
     vita2d_texture *bg = NULL;
     float ay = 0.3f;
     if (t->backdrop) bg = img_get(t->backdrop, SCR_W, (int)bgh, &fade);
     if (!bg && t->poster) { bg = img_get(t->poster, SCR_W, (int)bgh, &fade); ay = 0.2f; }
     float by = -dsy * 0.5f;
-    if (!bg || fade < 1) {
+    if (!t->backdrop && !t->poster) { /* nothing to show: the scene, never a flash of it while a picture loads */
         Lofi *l = S.show_lofi ? lofi_get(T->scene) : NULL;
         if (l) lofi_draw(l, 0, by, SCR_W, bgh, 0, col_a(0xFFFFFFFF, T->scene_alpha), 0.5f, 0.6f);
     }
@@ -484,22 +484,42 @@ void detail_frame(float dt) {
                 gfx_rrect(DM - 12, ry + 2, SCR_W - DM * 2 + 24, row_h - 4, T->radius_sm, col_a(T->text, (T->light ? 0.06f : 0.07f) * f));
                 if (T->focus_style == 1) gfx_rrect_outline(DM - 12, ry + 2, SCR_W - DM * 2 + 24, row_h - 4, T->radius_sm, 1.5f, col_a(T->focus, 0.7f * f));
             }
-            /* number badge */
+            /* a picture tile: a different part of the show's artwork for each episode */
             char num[16];
-            if (t->kind == KIND_SERIES && e->number_end > e->number) snprintf(num, sizeof(num), "%d–%d", e->number, e->number_end);
+            if (t->kind == KIND_SERIES && e->number_end > e->number) snprintf(num, sizeof(num), "%d-%d", e->number, e->number_end);
             else if (t->kind == KIND_SERIES) snprintf(num, sizeof(num), "%d", e->number);
             else if (t->kind == KIND_BOOK) snprintf(num, sizeof(num), "%d", e->number);
             else snprintf(num, sizeof(num), "%d", i + 1);
             int is_resume = ents[i] == t->resume;
-            gfx_rrect(DM, ry + 12, 40, 40, T->radius_sm, is_resume ? T->accent : col_a(T->text, 0.08f));
-            if (e->finished && !is_resume) icon(IC_CHECK, DM + 20, ry + 32, 18, T->accent);
-            else text_center(F_SEMI, 15, DM + 20, ry + 38, is_resume ? T->on_accent : T->text2, num);
+            float tw2 = 120, th2 = 68, tx2 = DM, ty2 = ry + (row_h - th2) / 2;
+            float tr = T->radius_sm;
+            if (bg && fade >= 1) {
+                float ax = fmodf(0.13f + e->number * 0.29f + e->season * 0.17f, 1.0f);
+                gfx_tex(bg, tx2, ty2, tw2, th2, tr, col_a(0xFFFFFFFF, e->finished && !is_resume ? 0.55f : 0.95f), ax, 0.45f);
+            } else {
+                gfx_rrect_grad(tx2, ty2, tw2, th2, tr, col_mix(T->surface2, T->accent, 0.18f), col_mix(T->surface, 0xFF000000, 0.2f));
+            }
+            gfx_rrect_grad(tx2, ty2, tw2, th2, tr, col_a(0xFF000000, 0.0f), col_a(0xFF000000, 0.55f));
+            text(F_BOLD, 18, tx2 + 9, ty2 + th2 - 9, 0xFFFFFFFF, num);
+            if (e->finished && !is_resume) {
+                gfx_circle(tx2 + tw2 - 13, ty2 + 13, 9, T->accent);
+                icon(IC_CHECK, tx2 + tw2 - 13, ty2 + 13, 12, T->on_accent);
+            }
+            if (e->dur > 0 && !e->finished && e->pos > 0) {
+                gfx_rect(tx2, ty2 + th2 - 4, tw2, 4, col_a(0xFFFFFFFF, 0.25f));
+                gfx_rect(tx2, ty2 + th2 - 4, tw2 * clampf((float)e->pos / e->dur, 0, 1), 4, T->accent);
+            }
+            if (is_resume) gfx_rrect_outline(tx2 - 2, ty2 - 2, tw2 + 4, th2 + 4, tr + 2, 2, T->accent);
+            if (f > 0.3f) {
+                gfx_circle(tx2 + tw2 / 2, ty2 + th2 / 2, 17, col_a(0xFF000000, 0.45f * f));
+                icon(e->media == MEDIA_BOOK ? IC_BOOK : IC_PLAY, tx2 + tw2 / 2 + 1.5f, ty2 + th2 / 2, 16, col_a(0xFFFFFFFF, f));
+            }
             char name[256];
             if (e->name && e->name[0] && t->kind == KIND_SERIES) snprintf(name, sizeof(name), "%s", e->name);
             else if (t->kind == KIND_SERIES) snprintf(name, sizeof(name), e->season == 0 ? "Special %d" : "Episode %d", e->number);
             else if (t->kind == KIND_BOOK && t->ne > 1) snprintf(name, sizeof(name), "Volume %d", e->number);
             else snprintf(name, sizeof(name), "%s", e->name && e->name[0] ? e->name : path_basename(e->path));
-            text_ellipsis(F_SEMI, 15, DM + 56, ry + 30, 560, i == ei && zone == 2 ? T->text : col_a(T->text, 0.88f), name);
+            text_ellipsis(F_SEMI, 16, DM + 138, ry + 36, 560, i == ei && zone == 2 ? T->text : col_a(T->text, 0.88f), name);
             char sub[96] = "";
             if (e->media == MEDIA_BOOK) {
                 if (e->dur > 0) snprintf(sub, sizeof(sub), e->finished ? "Finished" : "Page %d of %d", e->pos + 1, e->dur);
@@ -512,9 +532,7 @@ void detail_frame(float dt) {
                 else if (e->pos > 0 && e->dur > 0) snprintf(sub, sizeof(sub), "%dm left", (e->dur - e->pos) / 60000);
                 else snprintf(sub, sizeof(sub), "%s", d[0] ? d : "Not watched yet");
             }
-            text(F_META, 12, DM + 56, ry + 48, T->text3, sub);
-            if (e->dur > 0 && !e->finished && e->pos > 0) draw_progress(SCR_W - DM - 120, ry + 30, 110, 4, (float)e->pos / e->dur);
-            if (f > 0.5f) icon(e->media == MEDIA_BOOK ? IC_BOOK : IC_PLAY, SCR_W - DM - 150, ry + 32, 16, col_a(T->text, f));
+            text(F_META, 12, DM + 138, ry + 56, is_resume ? T->accent : T->text3, is_resume && !e->finished ? (e->pos > 0 ? sub : "Up next") : sub);
             if (hit(DM - 12, ry, SCR_W - DM * 2 + 24, row_h) && !in.dragging) {
                 ei = i;
                 zone = 2;

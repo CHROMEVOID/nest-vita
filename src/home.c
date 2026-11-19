@@ -9,7 +9,7 @@ enum { TAB_HOME, TAB_MOVIES, TAB_SHOWS, TAB_BOOKS, TAB_MUSIC, TAB_SECRET, TAB_CO
 static const char *TAB_NAMES[TAB_COUNT] = {"Home", "Movies", "Shows", "Books", "Music", "Secret"};
 
 enum { ROW_HERO, ROW_POSTER, ROW_WIDE, ROW_ACTION };
-#define MAXROWS 14
+#define MAXROWS 40
 #define MAXITEMS 120
 
 typedef struct {
@@ -99,6 +99,20 @@ static void build_rows(void) {
 
     n = lib_continue(-2, secret, tmp, MAXITEMS);
     add_row(ROW_POSTER, "Continue reading", tmp, NULL, n);
+
+    /* folders sorted "by folder": each one is its own shelf, its videos in order */
+    for (int i = 0; i < L.nt && nrows < MAXROWS - 6; i++) {
+        Title *ft = &L.t[i];
+        if (ft->secret != secret || ft->kind != KIND_SERIES || !ft->key) continue;
+        if (strncmp(ft->key, secret ? "xf:" : "f:", secret ? 3 : 2)) continue;
+        int k = 0;
+        for (int e = ft->e0; e < ft->e0 + ft->ne && k < MAXITEMS; e++) {
+            tmp[k] = i;
+            ents[k] = e;
+            k++;
+        }
+        add_row(ROW_WIDE, ft->title, tmp, ents, k);
+    }
 
     if (!secret) {
         int seed;

@@ -1354,26 +1354,39 @@ static void lyrics_tick(int ti) {
 }
 
 static void draw_lyrics(float x, float y, float w, float h, float a, float dt) {
-    gfx_glass_tint(x, y, w, h, T->radius + 4, a, 0xFF202028);
-    float pad = 22, tw = w - pad * 2;
+    int ti = mus_current();
+    const char *art = ti >= 0 && ti < M.nt ? M.t[ti].art : NULL;
+    float r = T->radius + 6;
+    /* the card: the cover, blurred and darkened, so the words sit on the song's own colours */
+    gfx_shadow(x, y + 10, w, h, r, 30, col_a(0xFF000000, 0.45f * a));
+    gfx_rrect(x, y, w, h, r, col_a(0xFF121216, 0.96f * a));
+    {
+        float f = 0;
+        vita2d_texture *tex = art && art[0] ? img_get(art, 20, 20, &f) : NULL;
+        if (tex) gfx_tex(tex, x, y, w, h, r, col_a(0xFFFFFFFF, 0.55f * a * f), 0.5f, 0.5f);
+    }
+    gfx_rrect_grad(x, y, w, h, r, col_a(0xFF000000, 0.15f * a), col_a(0xFF000000, 0.5f * a));
+    gfx_rrect_outline(x, y, w, h, r, 1, col_a(0xFFFFFFFF, 0.07f * a));
+    text(F_META, 10, x + 24, y + 26, col_a(0xFFFFFFFF, 0.5f * a), "LYRICS");
+    if (lyr_n && !lyr_synced) text_right(F_META, 10, x + w - 20, y + 26, col_a(0xFFFFFFFF, 0.35f * a), "NOT SYNCED");
+    float pad = 24, tw = w - pad * 2, top = y + 38, view = h - 38 - 10;
     if (lyr_loading || lyr_track != mus_current()) {
         draw_spinner(x + w / 2, y + h / 2, 12, col_a(0xFFFFFFFF, a));
         return;
     }
     if (!lyr_n) {
-        icon(IC_MIC, x + w / 2, y + h / 2 - 40, 30, col_a(0xFFFFFFFF, 0.5f * a));
-        text_center(F_SEMI, 16, x + w / 2, y + h / 2 + 4, col_a(0xFFFFFFFF, a), "No lyrics for this song");
-        text_center(F_REG, 12, x + w / 2, y + h / 2 + 28, col_a(0xFFFFFFFF, 0.55f * a), "Nest shows lyrics saved inside the song,");
-        text_center(F_REG, 12, x + w / 2, y + h / 2 + 46, col_a(0xFFFFFFFF, 0.55f * a), "or from a .lrc file with the same name.");
+        icon(IC_MIC, x + w / 2, y + h / 2 - 36, 28, col_a(0xFFFFFFFF, 0.45f * a));
+        text_center(F_SEMI, 16, x + w / 2, y + h / 2 + 6, col_a(0xFFFFFFFF, a), "No lyrics for this song");
+        text_center(F_REG, 12, x + w / 2, y + h / 2 + 30, col_a(0xFFFFFFFF, 0.5f * a), "Nest shows lyrics saved inside the song,");
+        text_center(F_REG, 12, x + w / 2, y + h / 2 + 47, col_a(0xFFFFFFFF, 0.5f * a), "or a .lrc file with the same name.");
         return;
     }
     if (lyr_hdirty) { /* line heights, once */
         for (int i = 0; i < lyr_n; i++) {
             const char *tx = lyr_text + lyr_lines[i].off;
-            int nl = tx[0] ? text_wrap_count(F_BOLD, 17, tw, tx) : 1;
-            if (nl < 1) nl = 1;
-            if (nl > 4) nl = 4;
-            lyr_lines[i].h = nl * 23 + 14;
+            int nl = tx[0] && strcmp(tx, "~") ? text_wrap_count(F_BOLD, 21, tw, tx) : 1;
+            nl = clampi(nl, 1, 4);
+            lyr_lines[i].h = nl * 27 + 16;
         }
         lyr_hdirty = 0;
     }
@@ -1381,34 +1394,54 @@ static void draw_lyrics(float x, float y, float w, float h, float a, float dt) {
     int cur = -1;
     if (lyr_synced)
         for (int i = 0; i < lyr_n; i++)
-            if (lyr_lines[i].ms <= pos + 250) cur = i;
+            if (lyr_lines[i].ms <= pos + 200) cur = i;
     float total = 0, cur_y = 0;
     for (int i = 0; i < lyr_n; i++) {
         if (i == cur) cur_y = total;
         total += lyr_lines[i].h;
     }
-    if (lyr_synced) lyr_scroll_t = cur >= 0 ? cur_y - h * 0.36f : -h * 0.36f;
-    else lyr_scroll_t = dur > 0 ? (float)pos / dur * fmaxf(0, total - h * 0.5f) - 20 : 0;
-    if (in.dragging && touch_in(x, y, w, h)) { lyr_scroll -= in.ddy; lyr_scroll_t = lyr_scroll; }
-    if (!in.touching) lyr_scroll = approach(lyr_scroll, lyr_scroll_t, 5, dt);
-    gfx_clip(x + 2, y + 2, w - 4, h - 4);
-    float ly = y + pad - lyr_scroll;
+    static KScroll lks;
+    static float hold_t; /* after you scroll by hand, it waits a moment before following again */
+    if (in.dragging && touch_in(x, y, w, h)) hold_t = 2.5f;
+    hold_t -= dt;
+    if (hold_t <= 0 && !lks.held && lks.vel == 0) {
+        if (lyr_synced) lyr_scroll_t = cur >= 0 ? cur_y - view * 0.32f : -view * 0.32f;
+        else lyr_scroll_t = dur > 0 ? (float)pos / dur * fmaxf(0, total - view * 0.5f) : 0;
+    }
+    {
+        float keep = lyr_scroll_t;
+        kscroll(&lyr_scroll, &lyr_scroll_t, &lks, total, in.dragging && touch_in(x, y, w, h), in.ddy, in.vy, dt);
+        /* the lyrics may sit above the top: allow it while following the song */
+        if (hold_t <= 0 && !lks.held && lks.vel == 0) {
+            lyr_scroll_t = keep;
+            lyr_scroll = approach(lyr_scroll, keep, 6, dt);
+        }
+    }
+    gfx_clip(x + 2, top, w - 4, view);
+    float ly = top + 8 - lyr_scroll;
     for (int i = 0; i < lyr_n; i++) {
         float lh = lyr_lines[i].h;
-        if (ly + lh > y && ly < y + h) {
+        if (ly + lh > top - 40 && ly < top + view + 40) {
             const char *tx = lyr_text + lyr_lines[i].off;
-            float al = !lyr_synced ? 0.85f : i == cur ? 1.0f : i < cur ? 0.32f : 0.5f;
-            col_t c = i == cur ? 0xFFFFFFFF : col_a(0xFFFFFFFF, al);
-            if (tx[0]) text_wrap(F_BOLD, 17, x + pad, ly + 18, tw, 23, 4, col_a(c, a), tx);
-            if (lyr_synced && hit(x, ly, w, lh) && !in.dragging) mus_seek(lyr_lines[i].ms); /* tap a line to jump there */
+            int now = i == cur;
+            float al = !lyr_synced ? 0.88f : now ? 1.0f : i < cur ? 0.28f : 0.55f;
+            if (!strcmp(tx, "~") || !tx[0]) { /* an instrumental break: three soft dots */
+                for (int d = 0; d < 3; d++) {
+                    float k = now ? 0.45f + 0.55f * fabsf(sinf(g_time * 3.0f + d * 0.8f)) : 0.5f;
+                    gfx_circle(x + pad + 6 + d * 16, ly + 16, now ? 5 : 4, col_a(0xFFFFFFFF, al * k * a));
+                }
+            } else {
+                if (now) gfx_rrect(x + 10, ly + 2, 3, lh - 18, 1.5f, col_a(T->accent, a)); /* the line being sung */
+                text_wrap(F_BOLD, now ? 21 : 19, x + pad, ly + 22, tw, 27, 4, col_a(0xFFFFFFFF, al * a), tx);
+            }
+            if (lyr_synced && hit(x, ly, w, lh) && !in.dragging) { mus_seek(lyr_lines[i].ms); hold_t = 0; } /* tap a line to jump there */
         }
         ly += lh;
     }
     gfx_noclip();
-    /* soft fade at the top and bottom */
-    gfx_rrect_grad(x, y, w, 40, T->radius + 4, col_a(0xFF101016, 0.55f * a), col_a(0xFF101016, 0));
-    gfx_grad_v(x, y + h - 40, w, 40, col_a(0xFF101016, 0), col_a(0xFF101016, 0.45f * a));
-    if (!lyr_synced) text_right(F_META, 10, x + w - 14, y + h - 12, col_a(0xFFFFFFFF, 0.4f * a), "not synced");
+    /* soft edges top and bottom, in the card's colour */
+    gfx_grad_v(x, top, w, 28, col_a(0xFF121216, 0.7f * a), col_a(0xFF121216, 0));
+    gfx_rrect_grad(x, y + h - 40, w, 40, r, col_a(0xFF0E0E12, 0), col_a(0xFF0E0E12, 0.75f * a));
 }
 
 void nowplaying_open(void) {
@@ -1573,7 +1606,7 @@ void nowplaying_frame(float dt) {
     }
 
     /* ---------- cover ---------- */
-    float as = 300, ax = 64, ay = 104;
+    float as = 360, ax = 40, ay = 84; /* cover / lyrics: left; the panel on the right matches its top and bottom */
     float bump = 1 + 0.012f * mus_level() * (S.reduce_motion ? 0 : 1);
     float aw = as * bump;
     gfx_shadow(ax, ay + 14, as, as, T->radius, 40, col_a(0xFF000000, 0.6f));
@@ -1590,7 +1623,7 @@ void nowplaying_frame(float dt) {
             if (hit(px2 - 4, py2 - 4, pw2 + 8, ph2 + 8)) { lyr_open = 1; input_consume_touch(); }
         }
     }
-    if (lyr_a > 0.01f) draw_lyrics(36, 80, as + 56, 404, lyr_a, dt);
+    if (lyr_a > 0.01f) draw_lyrics(ax, ay, as, as, lyr_a, dt);
 
     /* top bar */
     icon(IC_CHEVRON_D, 34, 34, 20, 0xFFFFFFFF);
@@ -1612,9 +1645,14 @@ void nowplaying_frame(float dt) {
     if (hit(SCR_W - 80, 0, 80, 64)) music_track_menu(ti, -1, -1);
 
     /* ---------- title block ---------- */
-    float rx = 420, rw = SCR_W - rx - 56;
-    gfx_glass(rx - 26, 150, rw + 52, 372, T->radius + 4, 0.75f);
-    float ty = 190;
+    float px0 = ax + as + 24, pw0 = SCR_W - 40 - px0; /* the right panel: same top and height as the cover */
+    float rx = px0 + 28, rw = pw0 - 56;
+    if (S.glass) gfx_glass(px0, ay, pw0, as, T->radius + 6, 0.8f);
+    else {
+        gfx_rrect(px0, ay, pw0, as, T->radius + 6, col_a(0xFF000000, 0.28f));
+        gfx_rrect_outline(px0, ay, pw0, as, T->radius + 6, 1, col_a(0xFFFFFFFF, 0.07f));
+    }
+    float ty = ay + 62;
     int tfs = T->display_font == 2 ? 24 : 30;
     if (text_w(F_DISPLAY, tfs, t->title) > rw) tfs = tfs * 4 / 5;
     text_ellipsis(F_DISPLAY, tfs, rx, ty, rw, 0xFFFFFFFF, t->title);
@@ -1627,7 +1665,7 @@ void nowplaying_frame(float dt) {
     if (hit(rx, ty + 38, rw, 22)) mpage_open(FROM_ALBUM, t->album_i);
 
     /* ---------- seek bar ---------- */
-    float sx = rx, sw = rw, sy = 290;
+    float sx = rx, sw = rw, sy = ay + 150;
     int dur = mus_dur_ms(), pos = mus_pos_ms();
     if (in.touching && !seek_drag && fabsf(in.sy - sy) < 18 && in.sx > sx - 10 && in.sx < sx + sw + 10 && dur > 0) seek_drag = 1;
     if (seek_drag) {
@@ -1651,7 +1689,7 @@ void nowplaying_frame(float dt) {
     text_right(F_META, 12, sx + sw, sy + 24, col_a(0xFFFFFFFF, 0.65f), dur ? a2 : "");
 
     /* ---------- main controls ---------- */
-    float cy = 362, cx0 = rx + sw / 2;
+    float cy = ay + 220, cx0 = rx + sw / 2;
     float bx[5] = {cx0 - 190, cx0 - 95, cx0, cx0 + 95, cx0 + 190};
     int playing = mus_playing();
     for (int i = 0; i < 5; i++) {
@@ -1682,7 +1720,7 @@ void nowplaying_frame(float dt) {
     }
 
     /* ---------- extras row ---------- */
-    float ey = 432;
+    float ey = ay + 296;
     int ics[7] = {t->liked ? IC_HEART_FILL : IC_HEART, IC_PLUS, IC_QUEUE, IC_MIC, IC_EQ, IC_TIMER, IC_SCREEN_OFF};
     static const char *elab[7] = {"Like", "Playlist", "Queue", "Lyrics", "Sound", "Sleep", "Screen off"};
     float estep = rw / 7;
@@ -1715,10 +1753,10 @@ void nowplaying_frame(float dt) {
     }
     /* volume: its own row, 0-100% normal and up to 200% boost */
     {
-        float vy = 492;
+        float vy = ay + as + 34; /* its own row under both */
         float f = nf == 3 && !queue_open && !eq_open ? 1 : 0;
-        icon(IC_VOLUME, rx + 10, vy, 18, col_a(0xFFFFFFFF, 0.8f));
-        float bx0 = rx + 34, bw = rw - 34 - 56;
+        icon(IC_VOLUME, ax + 12, vy, 18, col_a(0xFFFFFFFF, 0.8f));
+        float bx0 = ax + 38, bw = SCR_W - 40 - 64 - bx0;
         int v = mus_volume();
         if (!eq_open && !queue_open && in.touching && (vol_drag || (fabsf(in.sy - vy) < 20 && in.sx > bx0 - 12 && in.sx < bx0 + bw + 12))) {
             vol_drag = 1;
@@ -1740,12 +1778,12 @@ void nowplaying_frame(float dt) {
         if (f) gfx_ring(bx0 + bw * k, vy, 12, 2, T->accent);
         char vl[16];
         snprintf(vl, sizeof(vl), "%d%%", v);
-        text_right(F_SEMI, 13, rx + rw, vy + 5, v > 100 ? T->accent : col_a(0xFFFFFFFF, 0.75f), vl);
+        text_right(F_SEMI, 13, SCR_W - 40, vy + 5, v > 100 ? T->accent : col_a(0xFFFFFFFF, 0.75f), vl);
         if (v > 100) text_center(F_META, 9, bx0 + bw * (b1 + 1) / 2, vy - 10, col_a(T->accent, 0.8f), "BOOST");
     }
 
     /* little level bars under the cover */
-    if (playing && !S.reduce_motion && lyr_a < 0.5f) {
+    if (0) { /* (the level bars made room for the volume row) */
         for (int b = 0; b < 24; b++) {
             float k2 = 0.25f + 0.75f * fabsf(sinf(g_time * (3.1f + (b % 5) * 0.9f) + b * 0.7f));
             float h = 3 + 22 * k2 * mus_level();

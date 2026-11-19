@@ -146,6 +146,14 @@ static void secret_mode_cb(int choice, void *ud) {
     scan_open(SCAN_ADD);
 }
 
+static void lib_mode_cb(int choice, void *ud) {
+    (void)ud;
+    if (choice < 0) return;
+    g_scan_secret = 0;
+    g_scan_mode = choice == 1;
+    scan_open(purpose == PICK_ONBOARD ? SCAN_ONBOARD : SCAN_ADD);
+}
+
 static char target[512];
 
 /* the folder that "Use" applies to: the highlighted one when there is one,
@@ -209,9 +217,9 @@ static void really_choose(void) {
         modal_menu("How should Nest sort it?", items, 2, secret_mode_cb, NULL);
         return;
     }
-    g_scan_secret = 0;
-    g_scan_mode = 0;
-    scan_open(purpose == PICK_ONBOARD ? SCAN_ONBOARD : SCAN_ADD);
+    static const char *items[] = {"Sort by guess \xe2\x80\x94 Nest works out films, shows and books",
+                                  "Sort by folder \xe2\x80\x94 a shelf for each folder, videos inside it"};
+    modal_menu("How should Nest sort it?", items, 2, lib_mode_cb, NULL);
 }
 
 void picker_frame(float dt) {
