@@ -37,6 +37,8 @@ That's **Nest**. Put your shows, movies and manga on the memory card, and it qui
 
 📖 **It reads, too.** Manga, comics, PDFs and ePubs. Right-to-left for manga, two pages side by side, and one long scroll for webtoons. Perfect for "one more chapter" turning into six.
 
+🗂️ **Or keep your own folders.** Add a folder "by folder" and every folder inside it becomes its own shelf, with its videos in order, like *Continue Watching* but yours.
+
 ⏭️ **The small, nice things.**
 - **Skip intro.** Mark it once and R skips it on every episode.
 - **It remembers where you stopped**, so the next episode is always one button away.
