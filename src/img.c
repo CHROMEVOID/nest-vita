@@ -226,6 +226,7 @@ static uint8_t *decode_mem(const uint8_t *buf, size_t len, int maxw, int maxh, i
    The header remembers the original file's size and date, so a new poster
    (from Nest Metadata, say) is picked up straight away. */
 #include <psp2/io/stat.h>
+#include <psp2/io/fcntl.h>
 #define PX_DIR DATA_DIR "/cache"
 typedef struct {
     uint32_t magic, w, h, pad;
