@@ -503,8 +503,9 @@ void detail_frame(float dt) {
             float tr = T->radius_sm;
             if (bg && fade >= 1) {
                 /* zoom in 2.6x and pan to a different spot per episode, so no two tiles look alike */
-                unsigned hsh = (unsigned)(e->number * 2654435761u) ^ (unsigned)(e->season * 40503u);
-                float zx = (hsh % 1000) / 1000.0f, zy = ((hsh / 1000) % 1000) / 1000.0f;
+                /* golden-ratio steps: neighbouring episodes land far apart on the picture */
+                float zx = fmodf(0.21f + (e->number + e->season * 7) * 0.618034f, 1.0f);
+                float zy = fmodf(0.37f + (e->number + e->season * 3) * 0.414214f, 1.0f);
                 /* a window 1/2.6 of the picture's size, in the picture's own shape */
                 float bw2 = vita2d_texture_get_width(bg), bh2 = vita2d_texture_get_height(bg);
                 float uw = 1 / 2.6f, vh2 = fminf(1.0f, uw * (bw2 / bh2) * (th2 / tw2));
