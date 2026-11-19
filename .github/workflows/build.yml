@@ -37,7 +37,11 @@ jobs:
         run: |
           mkdir -p third_party/sqlite && cd third_party/sqlite
           curl -sSL -o s.zip https://www.sqlite.org/2024/sqlite-amalgamation-3460100.zip
-          unzip -o -j s.zip && ls
+          # unzip if it's there; otherwise cmake (always in the SDK image) or python can open zips too
+          if command -v unzip >/dev/null; then unzip -o -j s.zip;
+          elif command -v cmake >/dev/null; then cmake -E tar xf s.zip && cp sqlite-amalgamation-*/* .;
+          else python3 -c "import zipfile,os;z=zipfile.ZipFile('s.zip');[open(os.path.basename(n),'wb').write(z.read(n)) for n in z.namelist() if not n.endswith('/')]"; fi
+          ls
       - name: Build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
