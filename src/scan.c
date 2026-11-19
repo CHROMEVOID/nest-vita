@@ -1,6 +1,7 @@
 /* Recursive library scanner: turns folders of files into Movies, Shows
    (with seasons, even when every season sits in its own folder) and Books. */
 #include "scan.h"
+#include "mtags.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -14,6 +15,7 @@
 #include <psp2/io/dirent.h>
 #include <psp2/io/stat.h>
 int net_list(const char *dir, fs_cb cb, void *ud);
+int net_is_url(const char *p);
 int fs_list(const char *dir, fs_cb cb, void *ud) {
     if (!strncmp(dir, "http://", 7)) return net_list(dir, cb, ud); /* a folder on the PC */
     SceUID d = sceIoDopen(dir);
@@ -644,6 +646,24 @@ void scan_finish(ScanResult *r) {
             if (e->number_end >= next) next = e->number_end + 1;
             if (e->media == MEDIA_VIDEO && !e->playable) r->unplayable++;
         }
+#ifdef __vita__
+        /* nothing about it on the card? the video file may say something about itself */
+        if (!t->meta && t->kind != KIND_BOOK && t->ne > 0 && !net_is_url(t->e[0].path) && !r->cancel) {
+            char desc[1200], genre[96], show[160], cover[256], base[200];
+            int year = 0;
+            unsigned hsh = 2166136261u;
+            for (const char *c = t->key; *c; c++) hsh = (hsh ^ (unsigned char)*c) * 16777619u;
+            snprintf(base, sizeof(base), "ux0:data/Nest/embedded/%08x", hsh);
+            sceIoMkdir("ux0:data/Nest/embedded", 0777);
+            if (mtags_video(t->e[0].path, desc, sizeof(desc), genre, sizeof(genre), &year, show, sizeof(show),
+                            t->poster ? NULL : base, cover, sizeof(cover))) {
+                if (desc[0]) t->emb_overview = xstrdup(desc);
+                if (genre[0]) t->emb_genres = xstrdup(genre);
+                if (year && !t->year) t->emb_year = year;
+                if (cover[0] && !t->poster) t->poster = xstrdup(cover);
+            }
+        }
+#endif
         if (t->kind == KIND_MOVIE) r->movies++;
         else if (t->kind == KIND_SERIES) r->shows++, r->episodes += t->ne;
         else r->books += t->ne;
@@ -665,6 +685,8 @@ void scan_free(ScanResult *r) {
         free(t->backdrop);
         free(t->logo);
         free(t->meta);
+        free(t->emb_overview);
+        free(t->emb_genres);
     }
     free(r->t);
     memset(r, 0, sizeof(*r));

@@ -922,3 +922,85 @@ int mtags_lyrics(const char *path, char *out, int cap) {
     mtags_read(path, 0, &t, NULL);
     return (int)strlen(out);
 }
+
+/* ---------------- video files ---------------- */
+
+int mtags_video(const char *path, char *desc, int dn, char *genre, int gn, int *year, char *show, int sn,
+                const char *cover_base, char *cover_out, int con) {
+    if (dn) desc[0] = 0;
+    if (gn) genre[0] = 0;
+    if (sn) show[0] = 0;
+    if (con) cover_out[0] = 0;
+    *year = 0;
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    fseek(f, 0, SEEK_END);
+    long fsize = ftell(f);
+    uint8_t h[16];
+    long o = 0;
+    int got = 0;
+    while (o + 8 <= fsize) {
+        fseek(f, o, SEEK_SET);
+        if (fread(h, 1, 16, f) < 8) break;
+        uint64_t sz = be32(h);
+        int hl = 8;
+        if (sz == 1) { sz = (uint64_t)be32(h + 8) << 32 | be32(h + 12); hl = 16; }
+        else if (sz == 0) sz = fsize - o;
+        if (sz < 8) break;
+        if (!memcmp(h + 4, "moov", 4)) {
+            uint32_t n = (uint32_t)(sz - hl);
+            if (n > 24u * 1024 * 1024) break;
+            uint8_t *m = malloc(n);
+            fseek(f, o + hl, SEEK_SET);
+            if (!m || fread(m, 1, n, f) != n) { free(m); break; }
+            uint32_t un, mn, iln;
+            const uint8_t *ud = child(m, n, "udta", &un);
+            const uint8_t *me = ud ? child(ud, un, "meta", &mn) : child(m, n, "meta", &mn);
+            const uint8_t *il = me && mn > 4 ? child(me + 4, mn - 4, "ilst", &iln) : NULL;
+            uint32_t io = 0;
+            while (il && io + 8 <= iln) {
+                uint32_t isz = be32(il + io);
+                if (isz < 8 || io + isz > iln) break;
+                const uint8_t *name = il + io + 4;
+                uint32_t dn2;
+                const uint8_t *da = child(il + io + 8, isz - 8, "data", &dn2);
+                if (da && dn2 > 8) {
+                    const uint8_t *v = da + 8;
+                    uint32_t vn = dn2 - 8;
+                    if ((!memcmp(name, "ldes", 4) || (!memcmp(name, "desc", 4) && !desc[0])) && dn) {
+                        snprintf(desc, dn, "%.*s", (int)MIN(vn, (uint32_t)dn - 1), (const char *)v);
+                        got = 1;
+                    } else if (!memcmp(name, "\xa9gen", 4) && gn) {
+                        snprintf(genre, gn, "%.*s", (int)MIN(vn, (uint32_t)gn - 1), (const char *)v);
+                        got = 1;
+                    } else if (!memcmp(name, "\xa9" "day", 4)) {
+                        char y[8];
+                        snprintf(y, sizeof(y), "%.*s", (int)MIN(vn, 7u), (const char *)v);
+                        int yy = atoi(y);
+                        if (yy > 1900 && yy < 2100) { *year = yy; got = 1; }
+                    } else if (!memcmp(name, "tvsh", 4) && sn) {
+                        snprintf(show, sn, "%.*s", (int)MIN(vn, (uint32_t)sn - 1), (const char *)v);
+                        got = 1;
+                    } else if (!memcmp(name, "covr", 4) && cover_base && con && vn > 64) {
+                        const char *ext = v[0] == 0xFF && v[1] == 0xD8 ? "jpg" : !memcmp(v, "\x89PNG", 4) ? "png" : NULL;
+                        if (ext) {
+                            snprintf(cover_out, con, "%s.%s", cover_base, ext);
+                            FILE *cf = fopen(cover_out, "wb");
+                            if (cf) {
+                                fwrite(v, 1, vn, cf);
+                                fclose(cf);
+                                got = 1;
+                            } else cover_out[0] = 0;
+                        }
+                    }
+                }
+                io += isz;
+            }
+            free(m);
+            break;
+        }
+        o += (long)sz;
+    }
+    fclose(f);
+    return got;
+}

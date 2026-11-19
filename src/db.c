@@ -390,6 +390,9 @@ int db_import(ScanResult *r, const char *folder) {
         float score = 0;
         int myear = 0;
         if (t->meta) db_read_meta(t->meta, &ov, &ge, &score, &mt, &myear);
+        if (!ov && t->emb_overview) ov = strdup(t->emb_overview); /* what the video file said about itself */
+        if (!ge && t->emb_genres) ge = strdup(t->emb_genres);
+        if (!myear && t->emb_year) myear = t->emb_year;
         sqlite3_reset(up);
         sqlite3_bind_text(up, 1, t->key, -1, SQLITE_STATIC);
         sqlite3_bind_int(up, 2, t->kind);

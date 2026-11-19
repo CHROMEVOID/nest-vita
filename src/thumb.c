@@ -27,6 +27,7 @@ static int tried_n;
 static vita2d_texture vtex;
 static SceAvPlayerFrameInfo frame;
 static int idle_frames;
+static int attempt; /* 0: one second in; then a bit later if that frame was black */
 
 static void *t_alloc(void *p, uint32_t a, uint32_t s) { (void)p; return memalign(a < 16 ? 16 : a, s); }
 static void t_free(void *p, void *ptr) { (void)p; free(ptr); }
@@ -102,10 +103,10 @@ static int interesting(const uint8_t *p, int w, int h, int stride) {
     return mean > 24 && var > 180;
 }
 
-static void capture(void) {
+static int capture(void) {
     Title *t = &L.t[tidx];
     vita2d_texture *rt = vita2d_create_empty_texture_rendertarget(TW, TH, SCE_GXM_TEXTURE_FORMAT_A8B8G8R8);
-    if (!rt) return;
+    if (!rt) return 1;
     float vw = frame.details.video.width, vh = frame.details.video.height;
     vita2d_start_drawing_advanced(rt, 0);
     vita2d_clear_screen();
@@ -127,6 +128,7 @@ static void capture(void) {
         }
     }
     vita2d_free_texture(rt);
+    return good;
 }
 
 static int pick_next(void) {
@@ -199,6 +201,7 @@ void thumb_tick(float dt, int allowed) {
         if (!avplayer_ok(av)) return;
         sceAvPlayerAddSource(av, L.e[e].path);
         active = 1;
+        attempt = 0;
         t_open = 0;
         jumped = 0;
         target_ms = 0;
@@ -218,10 +221,14 @@ void thumb_tick(float dt, int allowed) {
             if (sceAvPlayerGetStreamInfo(av, i, &si) == 0) dur = si.duration;
         }
         if (!dur && t_open < 2) return;
-        /* a little way in: past black frames and studio logos */
-        target_ms = dur ? dur * 12 / 100 : 60000;
-        if (target_ms > 240000) target_ms = 240000;
-        if (target_ms < 3000) target_ms = dur / 2;
+        /* one second in, as asked; if that's a black frame, 8 seconds, then a little way in */
+        if (attempt == 0) target_ms = 1000;
+        else if (attempt == 1) target_ms = 8000;
+        else {
+            target_ms = dur ? dur * 12 / 100 : 60000;
+            if (target_ms > 240000) target_ms = 240000;
+        }
+        if (dur && target_ms >= dur) target_ms = dur / 2;
         sceAvPlayerJumpToTime(av, target_ms);
         jumped = 1;
         return;
@@ -234,7 +241,13 @@ void thumb_tick(float dt, int allowed) {
         memset(&vtex, 0, sizeof(vtex));
         sceGxmTextureInitLinear(&vtex.gxm_tex, frame.pData, SCE_GXM_TEXTURE_FORMAT_YVU420P2_CSC1,
                                 frame.details.video.width, frame.details.video.height, 0);
-        capture();
+        if (!capture() && attempt < 2) { /* too dark: try a later moment */
+            attempt++;
+            jumped = 0;
+            t_open = 2;
+            return;
+        }
+        attempt = 0;
         close_video();
     }
 }

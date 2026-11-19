@@ -23,7 +23,7 @@
 #define DATA_DIR "ux0:data/Nest"
 #define DB_PATH DATA_DIR "/nest.db"
 #define ASSET(p) "app0:assets/" p
-#define NEST_VERSION "1.1"
+#define NEST_VERSION "1.1.1"
 
 typedef uint32_t col_t;
 #define RGBA(r, g, b, a) RGBA8(r, g, b, a)

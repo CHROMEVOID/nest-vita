@@ -22,4 +22,8 @@ void mtags_clean(char *s);
 unsigned mtags_hash(const char *s);
 /* lyrics for a song: a .lrc file next to it, or the lyrics stored inside it. Returns the length (0 = none) */
 int mtags_lyrics(const char *path, char *out, int cap);
+/* what a video file says about itself (MP4 tags): description, genre, year, show name,
+   and its cover picture saved to cover_base + ".jpg"/".png" (cover_out gets the path). Returns 1 if anything was found */
+int mtags_video(const char *path, char *desc, int dn, char *genre, int gn, int *year, char *show, int sn,
+                const char *cover_base, char *cover_out, int con);
 #endif

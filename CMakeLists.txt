@@ -13,7 +13,7 @@ include("${VITASDK}/share/vita.cmake" REQUIRED)
 
 set(VITA_APP_NAME "Nest")
 set(VITA_TITLEID  "NEST00001")
-set(VITA_VERSION  "01.10")
+set(VITA_VERSION  "01.11")
 set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,-q -O2 -std=gnu11 -Wall -Wno-unused-function -Wno-unused-variable -Wno-format-truncation -Wno-stringop-truncation -fno-strict-aliasing")

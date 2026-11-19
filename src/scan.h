@@ -21,6 +21,8 @@ typedef struct {
     int year;
     char *artdir;     /* folder that owns the artwork */
     char *poster, *backdrop, *logo, *meta; /* local files, may be NULL */
+    char *emb_overview, *emb_genres;        /* found inside the video file itself */
+    int emb_year;
     ScanEntry *e;
     int ne, cap;
 } ScanTitle;
