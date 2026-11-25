@@ -17,7 +17,12 @@ const EqPreset EQ_PRESETS[EQ_PRESET_COUNT] = {
     {"Rock", {4, 2, -2, 0, 3, 4}},
     {"Acoustic", {2, 1, 0, 2, 2, 2}},
     {"Late night", {2, 1, 0, -1, -2, -3}},
-    {"Vita speaker", {-6, 0, 3, 3, 2, 1}}, /* the little speakers can't do deep bass: give it to the mids */
+#ifdef NEST_PORT
+    {"Handheld speaker", {-6, 0, 3, 3, 2, 1}},
+#else
+    {"Vita speaker", {-6, 0, 3, 3, 2, 1}},
+#endif
+    /* ^ the little speakers can't do deep bass: give it to the mids */
 };
 
 /* settings shared with the music thread */

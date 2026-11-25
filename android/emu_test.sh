@@ -28,30 +28,55 @@ adb push song.mp3 /sdcard/Music/Tester/song.mp3
 
 adb logcat -c
 adb shell am start -W -n com.chromevoid.nest/.NestActivity
-shot 01_launch 12
-shot 02_after20 8
-# through the first-run screens with ✕ (X key) and confirm
-for i in 1 2 3 4 5 6; do key KEYCODE_X; done
-shot 03_onboard 4
-for i in 1 2 3 4 5 6; do key KEYCODE_X; done
-shot 04_more 6
-shot 05_scan 15
+shot 01_launch 15
+key KEYCODE_X                       # Begin
+shot 02_pin 3
+key KEYCODE_DPAD_RIGHT; key KEYCODE_X   # PIN: Later
+shot 03_stories 3
+key KEYCODE_X                       # Pick a folder
+shot 04_devices 3
+key KEYCODE_X                       # Internal storage
+shot 05_storage 3
+for i in 1 2 3 4 5 6; do key KEYCODE_DPAD_DOWN; done
+shot 06_movies_hl 2
+key KEYCODE_V                       # use the highlighted folder
+shot 07_sort 3
+key KEYCODE_X                       # sort by guess
+shot 08_found 12
+key KEYCODE_X                       # Save
+shot 09_another 4
+key KEYCODE_X                       # I'm done
+shot 10_music 4
+key KEYCODE_X                       # Find my music
+shot 11_choices 4
+key KEYCODE_DPAD_DOWN; key KEYCODE_DPAD_DOWN; key KEYCODE_DPAD_DOWN
+shot 12_choices_down 2
+key KEYCODE_X
+shot 13_home 8
 key KEYCODE_DPAD_DOWN
+shot 14_home_down 3
 key KEYCODE_X
-shot 06_open 5
+shot 15_detail 6
 key KEYCODE_X
-shot 07_play 8
-shot 08_play_later 8
+shot 16_play 10
+shot 17_play_later 10
+key KEYCODE_DPAD_RIGHT
+shot 18_seek 6
 key KEYCODE_C
+shot 19_back 4
 key KEYCODE_C
-shot 09_back 4
+key KEYCODE_E; key KEYCODE_E
+shot 20_tab 4
+key KEYCODE_E
+shot 21_tab2 4
 adb shell input tap 960 540
-shot 10_tap 3
+shot 22_tap 3
 # background and back (music service path, surface recreation)
 adb shell input keyevent KEYCODE_HOME
-sleep 3
+sleep 4
+adb shell dumpsys activity services com.chromevoid.nest | grep -i "ServiceRecord" > "$OUT/services.txt"
 adb shell am start -n com.chromevoid.nest/.NestActivity
-shot 11_resume 5
+shot 23_resume 5
 
 adb shell pidof com.chromevoid.nest > "$OUT/pid.txt" || echo "NOT RUNNING" > "$OUT/pid.txt"
 adb logcat -d > "$OUT/logcat_full.txt"

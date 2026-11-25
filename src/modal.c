@@ -145,7 +145,7 @@ static void play_title(Title *t) {
     if (L.e[e].media == MEDIA_BOOK) {
         reader_open(e);
     } else if (!L.e[e].playable) {
-        toast("This file needs converting to MP4 to play on Vita");
+        toast(MSG_CONVERT);
     } else {
         player_open(e, 1);
     }

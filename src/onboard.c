@@ -127,7 +127,7 @@ void onboard_frame(float dt) {
             }
         }
         words("AND YOUR MUSIC", "Music lives here too",
-              "Put songs in ux0:music (or any folder you add) and Nest sorts them into albums and artists, even badly named ones. "
+              "Put songs in " MUSIC_PLACE " (or any folder you add) and Nest sorts them into albums and artists, even badly named ones. "
               "Make playlists, shuffle, use the queue, and turn the screen off while it plays. The Nest Music PC app brings your Spotify playlists over.",
               a);
         int c = two_buttons("Find my music", IC_NOTE, "Continue", -1, 420);

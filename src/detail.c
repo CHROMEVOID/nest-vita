@@ -105,7 +105,7 @@ void detail_open(int id) {
 static void play_entry(int e) {
     Entry *en = &L.e[e];
     if (en->media == MEDIA_BOOK) reader_open(e);
-    else if (!en->playable) toast("This file needs converting to MP4 to play on Vita");
+    else if (!en->playable) toast(MSG_CONVERT);
     else player_open(e, 1);
 }
 
@@ -133,7 +133,7 @@ static void delete_title_cb(int choice, void *ud) {
     build_entries();
     char m[96];
     if (failed) snprintf(m, sizeof(m), "Deleted %d files; %d couldn't be removed", n, failed);
-    else snprintf(m, sizeof(m), "Deleted from your Vita");
+    else snprintf(m, sizeof(m), "Deleted from your " DEVICE_WORD);
     toast(m);
 }
 
@@ -149,7 +149,7 @@ static void ask_delete_title(Title *t) {
     snprintf(body, sizeof(body),
              "This permanently deletes %d %s (%s) and its artwork from the memory card. It can't be undone.",
              t->ne, t->kind == KIND_BOOK ? (t->ne == 1 ? "book" : "books") : (t->ne == 1 ? "file" : "files"), sz);
-    modal_confirm("Delete from Vita?", body, "Delete", "Keep", delete_title_cb, NULL);
+    modal_confirm("Delete from " DEVICE_WORD "?", body, "Delete", "Keep", delete_title_cb, NULL);
 }
 
 static void delete_entry_cb(int choice, void *ud) {
@@ -161,7 +161,7 @@ static void delete_entry_cb(int choice, void *ud) {
     int ok = remove_entry_files(e, folder);
     lib_load();
     build_entries();
-    toast(ok ? "File deleted from your Vita" : "That file couldn't be deleted");
+    toast(ok ? "File deleted from your " DEVICE_WORD : "That file couldn't be deleted");
 }
 
 static void more_cb(int choice, void *ud) {
@@ -211,7 +211,7 @@ static void open_more(void) {
     snprintf(s, sizeof(s), "%s", t->secret ? "Remove from Secret tab" : "Add to Secret tab");
     const char *items[] = {"Edit title", "Choose poster image\xe2\x80\xa6", "Choose logo image\xe2\x80\xa6",
                            "Choose backdrop image\xe2\x80\xa6", "Reset artwork", w, s, "Artwork spotlight",
-                           "Delete from Vita\xe2\x80\xa6", "Find info in the folder"};
+                           "Delete from " DEVICE_WORD "\xe2\x80\xa6", "Find info in the folder"};
     modal_menu("More", items, 10, more_cb, NULL);
 }
 
@@ -223,7 +223,7 @@ static void entry_menu_cb(int choice, void *ud) {
         en->pos = 0;
         if (en->media == MEDIA_BOOK) reader_open(e);
         else if (en->playable) player_open(e, 0);
-        else toast("This file needs converting to MP4 to play on Vita");
+        else toast(MSG_CONVERT);
     } else if (choice == 1) {
         int f = !en->finished;
         en->finished = f;
@@ -262,7 +262,7 @@ static void entry_menu(int k) {
     static const char *items[3];
     items[0] = en->media == MEDIA_BOOK ? "Read from the start" : "Play from the beginning";
     items[1] = en->finished ? "Mark as unfinished" : "Mark as finished";
-    items[2] = "Delete from Vita\xe2\x80\xa6";
+    items[2] = "Delete from " DEVICE_WORD "\xe2\x80\xa6";
     modal_menu(path_basename(en->path), items, 3, entry_menu_cb, (void *)(intptr_t)k);
 }
 
@@ -460,7 +460,7 @@ void detail_frame(float dt) {
     Entry *first = &L.e[t->resume >= 0 ? t->resume : t->e0];
     if (first->media == MEDIA_VIDEO && !first->playable) {
         icon(IC_INFO, x + 8, bty + 70, 15, T->accent2);
-        text(F_REG, 13, x + 22, bty + 75, T->text2, "Vita's video chip plays MP4 (H.264). Convert this file to watch it here.");
+        text(F_REG, 13, x + 22, bty + 75, T->text2, MSG_CONVERT_WHY);
     }
 
     /* the seasons and episodes sit on a sheet that slides up over the backdrop */
@@ -545,7 +545,7 @@ void detail_frame(float dt) {
             } else {
                 char d[24] = "";
                 if (e->dur > 0) fmt_dur(e->dur, d, sizeof(d));
-                if (!e->playable) snprintf(sub, sizeof(sub), "Needs MP4 to play on Vita");
+                if (!e->playable) snprintf(sub, sizeof(sub), MSG_NEEDS_CONVERT);
                 else if (e->finished) snprintf(sub, sizeof(sub), "Watched%s%s", d[0] ? "  \xc2\xb7  " : "", d);
                 else if (e->pos > 0 && e->dur > 0) snprintf(sub, sizeof(sub), "%dm left", (e->dur - e->pos) / 60000);
                 else snprintf(sub, sizeof(sub), "%s", d[0] ? d : "Not watched yet");

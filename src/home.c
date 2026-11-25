@@ -319,7 +319,7 @@ static void hero_action(int which) {
     if (which == 0) {
         int e = t->resume >= 0 ? t->resume : t->e0;
         if (L.e[e].media == MEDIA_BOOK) reader_open(e);
-        else if (!L.e[e].playable) toast("This file needs converting to MP4 to play on Vita");
+        else if (!L.e[e].playable) toast(MSG_CONVERT);
         else player_open(e, 1);
     } else if (which == 1) {
         detail_open(t->id);
@@ -523,7 +523,7 @@ static void open_item(Row *r, int i) {
     if (r->type == ROW_WIDE && r->ent[i] >= 0) {
         Entry *e = &L.e[r->ent[i]];
         if (e->media == MEDIA_BOOK) reader_open(r->ent[i]);
-        else if (!e->playable) toast("This file needs converting to MP4 to play on Vita");
+        else if (!e->playable) toast(MSG_CONVERT);
         else player_open(r->ent[i], 1);
     } else {
         detail_open(t->id);
@@ -884,7 +884,7 @@ void main_frame(float dt) {
             asked = 1;
             if (!db_geti("seen_music_intro", 0))
                 modal_confirm("New: Music",
-                              "Nest plays your music now. Put songs in ux0:music and open the Music tab: albums, artists, "
+                              "Nest plays your music now. Put songs in " MUSIC_PLACE " and open the Music tab: albums, artists, "
                               "playlists, an equaliser, and it keeps playing with the screen off.",
                               "Open Music", "Later", music_intro_cb, NULL);
         }

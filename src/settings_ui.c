@@ -94,7 +94,7 @@ static void build(void) {
         add(R_ACTION, "Add a folder", "Films, shows, books and manga")->action = A_ADD;
         add(R_ACTION, "Add a music folder", "Where your songs are: Nest sorts them into albums and artists")->action = A_MUSIC;
         add(R_ACTION, "Add a secret folder", "Kept behind your PIN")->action = A_ADD_SECRET;
-        add(R_ACTION, "Scan the whole Vita", "Every memory card, minus system, game and app folders")->action = A_WHOLE;
+        add(R_ACTION, "Scan the whole " DEVICE_WORD, "Every memory card, minus system, game and app folders")->action = A_WHOLE;
         add(R_ACTION, "Watch from your PC (Wi-Fi)", "Run Nest PC Server on your computer, then type the address it shows")->action = A_PC;
         add(R_ACTION, "Rescan everything", "Pick up new and removed files")->action = A_RESCAN;
         nexcls = db_excludes(excls, 40);
@@ -166,7 +166,7 @@ static void build(void) {
     case CAT_ABOUT:
         add(R_INFO, "Nest " NEST_VERSION, "A calm home for your films, shows and books.");
         add(R_INFO, "Made by chromevoid", "Follow on TikTok: @chr0m3void  \xc2\xb7  github.com/CHROMEVOID/nest-vita");
-        add(R_INFO, "Video", "Plays MP4 with H.264 video and AAC audio (the Vita's hardware decoder). MKV and HEVC/x265 need converting first.");
+        add(R_INFO, "Video", MSG_PLAYS);
         add(R_INFO, "Posters and descriptions", "Put poster.jpg, fanart.jpg or .nfo files next to your files, use \xe2\x8b\xaf \xe2\x80\xba Find info in the folder, or run Nest Metadata on a PC.");
         add(R_INFO, "Credits", "Inter, DM Serif Display and Space Mono fonts (OFL). SQLite, libjpeg-turbo, libwebp, zlib, unrar.");
         break;
@@ -278,7 +278,7 @@ static void pc_cb(const char *text, void *ud) {
     for (char *p = addr + strlen(addr); p > addr && p[-1] == ' '; ) *--p = 0;
     if (!strchr(addr, ':')) strncat(addr, ":8642", sizeof(addr) - strlen(addr) - 1);
     if (!net_wifi_connected()) {
-        toast("Connect your Vita to Wi-Fi first");
+        toast("Connect your " DEVICE_WORD " to Wi-Fi first");
         return;
     }
     char root[200];
@@ -311,7 +311,7 @@ static void health(void) {
     }
     static char body[512];
     snprintf(body, sizeof(body),
-             "%d video file%s need converting to MP4 (H.264) before they can play.\n"
+             "%d video file%s need converting to MP4 before they can play.\n"
              "%d title%s have no poster yet (they use a soft placeholder).\n"
              "%d likely duplicate file%s.\n%d PDF file%s can't be opened yet.",
              unplayable, unplayable == 1 ? "" : "s", noart, noart == 1 ? "" : "s", dups, dups == 1 ? "" : "s",
@@ -355,7 +355,7 @@ static void act(int a) {
     case A_PIN: pin_open(db_get("pin_hash", NULL) ? PIN_CHANGE : PIN_CREATE); break;
     case A_LOCK: g_secret_unlocked = 0; toast("Secret is locked"); break;
     case A_WHOLE:
-        modal_confirm("Scan the whole Vita?",
+        modal_confirm("Scan the whole " DEVICE_WORD "?",
                       "Nest will look through every memory card. System, game and app folders are always skipped, and so is anything you exclude below.",
                       "Scan everything", "Cancel", whole_cb, NULL);
         break;

@@ -11,7 +11,7 @@
 #include "psp2_all.h"
 
 int port_ime_event(const SDL_Event *e);
-void port_screen_scale(float *s, float *ox, float *oy);
+void port_screen_scale_xy(float *sx, float *sy, float *ox, float *oy);
 SDL_Window *port_window(void);
 
 static SDL_GameController *pads[4];
@@ -63,10 +63,10 @@ static unsigned int key_bit(SDL_Keycode k, SDL_Scancode sc) {
 static void to_logical(float nx, float ny, float *lx, float *ly) {
     int w, h;
     SDL_GL_GetDrawableSize(port_window(), &w, &h);
-    float s, ox, oy;
-    port_screen_scale(&s, &ox, &oy);
-    *lx = (nx * w - ox) / s;
-    *ly = (ny * h - oy) / s;
+    float sx, sy, ox, oy;
+    port_screen_scale_xy(&sx, &sy, &ox, &oy);
+    *lx = (nx * w - ox) / sx;
+    *ly = (ny * h - oy) / sy;
 }
 
 void port_pump_events(void) {

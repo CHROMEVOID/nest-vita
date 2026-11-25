@@ -152,7 +152,7 @@ void scan_frame(float dt) {
         if (res.episodes) snprintf(sub, sizeof(sub), "%d episodes", res.episodes);
         if (res.unplayable) {
             char u[96];
-            snprintf(u, sizeof(u), "%s%d need converting to MP4 to play", sub[0] ? "  \xc2\xb7  " : "", res.unplayable);
+            snprintf(u, sizeof(u), "%s%d need converting to play", sub[0] ? "  \xc2\xb7  " : "", res.unplayable);
             strncat(sub, u, sizeof(sub) - strlen(sub) - 1);
         }
         text_center(F_REG, 13, SCR_W / 2, cy + 58, T->text3, sub);

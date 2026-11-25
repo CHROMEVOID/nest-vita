@@ -414,7 +414,7 @@ static void go_next(void) {
     save_progress(1);
     if (L.e[nx].playable) player_open(nx, 0);
     else {
-        toast("The next episode needs converting to MP4");
+        toast("The next episode can't play here \xe2\x80\x94 it needs converting");
         nav_pop();
     }
 }
@@ -661,7 +661,7 @@ void player_frame(float dt) {
                      (unsigned)diag_init, (unsigned)diag_src, diag_frames, diag_cdram_kb, diag_main_kb);
             text_center(F_META, 11, SCR_W / 2, SCR_H - 24, col_a(0xFFFFFFFF, 0.45f), dg);
             text_center(F_REG, 13, SCR_W / 2, SCR_H / 2 + 74, col_a(0xFFFFFFFF, 0.7f),
-                        "Vita plays MP4 files with H.264 video and AAC audio, up to 1280\xc3\x97" "720.");
+                        MSG_PLAY_FAIL);
         } else if (open_t > 5) {
             text_center(F_REG, 14, SCR_W / 2, SCR_H / 2 + 50, col_a(0xFFFFFFFF, 0.7f),
                         "Still opening\xe2\x80\xa6 large files can take a moment");

@@ -112,7 +112,7 @@ static void del_all_cb(int choice, void *ud) {
     remove_title_files(t, &failed);
     lib_load();
     build();
-    toast(failed ? "Some files couldn't be removed" : "Deleted from your Vita");
+    toast(failed ? "Some files couldn't be removed" : "Deleted from your " DEVICE_WORD);
 }
 
 static void menu_cb(int choice, void *ud) {
@@ -136,7 +136,7 @@ static void menu_cb(int choice, void *ud) {
         gb(s->bytes, sz, sizeof(sz));
         snprintf(body, sizeof(body), "Permanently deletes all %d file%s (%s) and the artwork. It can't be undone.",
                  t->ne, t->ne == 1 ? "" : "s", sz);
-        modal_confirm("Delete from Vita?", body, "Delete", "Keep", del_all_cb, NULL);
+        modal_confirm("Delete from " DEVICE_WORD "?", body, "Delete", "Keep", del_all_cb, NULL);
     }
 }
 
@@ -154,7 +154,7 @@ static void open_menu(int i) {
         snprintf(done_label, sizeof(done_label), "Delete watched (%d, %s)", s->done_n, sz);
         opts[n++] = done_label;
     }
-    opts[n++] = "Delete from Vita\xe2\x80\xa6";
+    opts[n++] = "Delete from " DEVICE_WORD "\xe2\x80\xa6";
     modal_menu(t->title, opts, n, menu_cb, NULL);
 }
 

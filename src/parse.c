@@ -90,7 +90,12 @@ int media_type_of(const char *filename) {
 }
 
 int video_is_playable(const char *filename) {
+#if defined(NEST_PORT) && defined(__ANDROID__)
+    /* Android's extractors open these; AVI, WMV and FLV they don't */
+    static const char *ok[] = {"mp4", "m4v", "mkv", "webm", "mov", "ts", "m2ts", "3gp", NULL};
+#else
     static const char *ok[] = {"mp4", "m4v", NULL};
+#endif
     return ext_in(filename, ok);
 }
 

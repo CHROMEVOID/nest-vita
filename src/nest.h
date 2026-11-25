@@ -25,6 +25,25 @@
 #define ASSET(p) "app0:assets/" p
 #define NEST_VERSION "1.1.1"
 
+/* words that differ between the Vita and the Android build */
+#ifdef NEST_PORT
+#define DEVICE_WORD "device"
+#define MSG_CONVERT "This file type can't play here \xe2\x80\x94 convert it to MP4"
+#define MSG_NEEDS_CONVERT "Can't play here \xe2\x80\x94 needs converting"
+#define MSG_CONVERT_WHY "AVI, WMV and FLV files don't play on Android. Convert this file to MP4 to watch it here."
+#define MSG_PLAYS "Plays MP4, MKV, WebM, MOV and TS on the device's hardware decoder: H.264, H.265/HEVC, VP9 and AV1 where the chip supports them."
+#define MSG_PLAY_FAIL "This device's decoder couldn't open this video's format."
+#define MUSIC_PLACE "your Music folder"
+#else
+#define DEVICE_WORD "Vita"
+#define MSG_CONVERT "This file needs converting to MP4 to play on Vita"
+#define MSG_NEEDS_CONVERT "Needs MP4 to play on Vita"
+#define MSG_CONVERT_WHY "Vita's video chip plays MP4 (H.264). Convert this file to watch it here."
+#define MSG_PLAYS "Plays MP4 with H.264 video and AAC audio (the Vita's hardware decoder). MKV and HEVC/x265 need converting first."
+#define MSG_PLAY_FAIL "Vita plays MP4 files with H.264 video and AAC audio, up to 1280\xc3\x97" "720."
+#define MUSIC_PLACE "ux0:music"
+#endif
+
 typedef uint32_t col_t;
 #define RGBA(r, g, b, a) RGBA8(r, g, b, a)
 #define HEX(h) RGBA8(((h) >> 16) & 255, ((h) >> 8) & 255, (h) & 255, 255)

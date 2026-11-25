@@ -94,7 +94,7 @@ static SDL_Window *win;
 static SDL_GLContext ctx;
 static int es; /* OpenGL ES context (Android), else desktop GL */
 static int dw, dh; /* drawable size in pixels */
-static float sc = 1, offx, offy; /* logical -> screen */
+static float sc = 1, scx = 1, scy = 1, offx, offy; /* logical -> screen (sc: the smaller of the two) */
 static unsigned int clear_color = 0xFF000000;
 static int clip_on, clip_x0, clip_y0, clip_x1, clip_y1;
 static vita2d_texture *target; /* render target being drawn into, or NULL for the screen */
@@ -108,6 +108,12 @@ static GLuint yuv_y, yuv_vu; /* the video frame being shown */
 static const void *yuv_data;
 static unsigned int yuv_serial, yuv_w, yuv_h;
 
+void port_screen_scale_xy(float *sx, float *sy, float *ox, float *oy) {
+    *sx = scx;
+    *sy = scy;
+    *ox = offx;
+    *oy = offy;
+}
 void port_screen_scale(float *s, float *ox, float *oy) {
     if (s) *s = sc;
     if (ox) *ox = offx;
@@ -185,8 +191,16 @@ static void update_viewport(void) {
     if (screen_fbo) return; /* off-screen test drawing keeps its size */
     SDL_GL_GetDrawableSize(win, &dw, &dh);
     sc = fminf(dw / LW, dh / LH);
-    offx = floorf((dw - LW * sc) / 2);
-    offy = floorf((dh - LH * sc) / 2);
+    scx = scy = sc;
+    /* a screen within a few percent of the Vita's shape (16:9 at 1920x1080 is 0.7% off)
+       is filled edge to edge: thin black bars look like a mistake, a 0.7% stretch doesn't */
+    float aspect = (dw / LW) / (dh / LH);
+    if (aspect > 0.97f && aspect < 1.03f) {
+        scx = dw / LW;
+        scy = dh / LH;
+    }
+    offx = floorf((dw - LW * scx) / 2);
+    offy = floorf((dh - LH * scy) / 2);
 }
 
 /* logical (960x544, y down) -> clip space for the current target */
@@ -197,8 +211,8 @@ static void xform(float *xf) {
         xf[2] = -1;
         xf[3] = -1;
     } else {
-        xf[0] = 2.0f * sc / dw;
-        xf[1] = -2.0f * sc / dh;
+        xf[0] = 2.0f * scx / dw;
+        xf[1] = -2.0f * scy / dh;
         xf[2] = -1 + 2.0f * offx / dw;
         xf[3] = 1 - 2.0f * offy / dh;
     }
@@ -228,8 +242,8 @@ static void apply_clip(void) {
     if (target) {
         glScissor_(clip_x0, clip_y0, clip_x1 - clip_x0, clip_y1 - clip_y0);
     } else {
-        int x0 = (int)floorf(offx + clip_x0 * sc), x1 = (int)ceilf(offx + clip_x1 * sc);
-        int y0 = (int)floorf(offy + clip_y0 * sc), y1 = (int)ceilf(offy + clip_y1 * sc);
+        int x0 = (int)floorf(offx + clip_x0 * scx), x1 = (int)ceilf(offx + clip_x1 * scx);
+        int y0 = (int)floorf(offy + clip_y0 * scy), y1 = (int)ceilf(offy + clip_y1 * scy);
         if (x1 < x0) x1 = x0;
         if (y1 < y0) y1 = y0;
         glScissor_(x0, dh - y1, x1 - x0, y1 - y0);
@@ -882,10 +896,11 @@ static int font_run(vita2d_font *f, int draw, int x, int y, unsigned int color, 
                 }
                 cur_page = g->page;
                 /* place it on whole screen pixels so it stays crisp */
-                float sx0 = target ? pen_x + g->xoff : roundf(offx + pen_x * s) + g->xoff;
-                float sy0 = target ? pen_y + g->yoff : roundf(offy + pen_y * s) + g->yoff;
-                float lx0 = target ? sx0 : (sx0 - offx) / s, ly0 = target ? sy0 : (sy0 - offy) / s;
-                float lx1 = lx0 + g->w / s, ly1 = ly0 + g->h / s;
+                float kx = target ? 1.0f : scx, ky = target ? 1.0f : scy;
+                float sx0 = target ? pen_x + g->xoff : roundf(offx + pen_x * kx) + g->xoff;
+                float sy0 = target ? pen_y + g->yoff : roundf(offy + pen_y * ky) + g->yoff;
+                float lx0 = target ? sx0 : (sx0 - offx) / kx, ly0 = target ? sy0 : (sy0 - offy) / ky;
+                float lx1 = lx0 + g->w / kx, ly1 = ly0 + g->h / ky;
                 vita2d_texture_vertex *v = q + nq;
                 v[0] = (vita2d_texture_vertex){lx0, ly0, 0.5f, g->u0, g->v0};
                 v[1] = (vita2d_texture_vertex){lx1, ly0, 0.5f, g->u1, g->v0};
