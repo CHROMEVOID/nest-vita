@@ -15,7 +15,9 @@ void port_screen_scale_xy(float *sx, float *sy, float *ox, float *oy);
 SDL_Window *port_window(void);
 
 static SDL_GameController *pads[4];
-static unsigned int key_buttons;   /* from the keyboard / back key */
+static unsigned int key_buttons;   /* held: from the keyboard, the back key and pad buttons */
+static unsigned int fresh_presses;  /* pressed during this frame's events */
+static unsigned int late_releases;  /* let go in the same frame they were pressed: released next frame */
 static int touch_down;
 static float touch_x, touch_y;      /* logical 960x544 */
 static SDL_FingerID touch_id;
@@ -69,8 +71,43 @@ static void to_logical(float nx, float ny, float *lx, float *ly) {
     *ly = (ny * h - oy) / sy;
 }
 
+/* a press always lasts at least one frame, however quick the tap (or an adb keyevent) was */
+static void btn_press(unsigned int bit) {
+    if (!bit) return;
+    key_buttons |= bit;
+    fresh_presses |= bit;
+    late_releases &= ~bit;
+}
+static void btn_release(unsigned int bit) {
+    if (!bit) return;
+    if (fresh_presses & bit) late_releases |= bit;
+    else key_buttons &= ~bit;
+}
+static unsigned int pad_bit(int b) {
+    switch (b) {
+    case SDL_CONTROLLER_BUTTON_A: return SCE_CTRL_CROSS;
+    case SDL_CONTROLLER_BUTTON_B: return SCE_CTRL_CIRCLE;
+    case SDL_CONTROLLER_BUTTON_X: return SCE_CTRL_SQUARE;
+    case SDL_CONTROLLER_BUTTON_Y: return SCE_CTRL_TRIANGLE;
+    case SDL_CONTROLLER_BUTTON_LEFTSHOULDER: return SCE_CTRL_LTRIGGER;
+    case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: return SCE_CTRL_RTRIGGER;
+    case SDL_CONTROLLER_BUTTON_START: return SCE_CTRL_START;
+    case SDL_CONTROLLER_BUTTON_BACK: return SCE_CTRL_SELECT;
+    case SDL_CONTROLLER_BUTTON_DPAD_UP: return SCE_CTRL_UP;
+    case SDL_CONTROLLER_BUTTON_DPAD_DOWN: return SCE_CTRL_DOWN;
+    case SDL_CONTROLLER_BUTTON_DPAD_LEFT: return SCE_CTRL_LEFT;
+    case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: return SCE_CTRL_RIGHT;
+    case SDL_CONTROLLER_BUTTON_LEFTSTICK: return SCE_CTRL_L3;
+    case SDL_CONTROLLER_BUTTON_RIGHTSTICK: return SCE_CTRL_R3;
+    default: return 0;
+    }
+}
+
 void port_pump_events(void) {
     SDL_Event e;
+    key_buttons &= ~late_releases;
+    late_releases = 0;
+    fresh_presses = 0;
     if (release_next) {
         touch_down = 0;
         release_next = 0;
@@ -87,7 +124,12 @@ void port_pump_events(void) {
         case SDL_CONTROLLERDEVICEADDED:
             open_pads();
             break;
+        case SDL_WINDOWEVENT:
+            /* going to the background: nothing stays held down */
+            if (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST) key_buttons = late_releases = 0;
+            break;
         case SDL_CONTROLLERDEVICEREMOVED:
+            key_buttons = late_releases = 0;
             for (int k = 0; k < 4; k++)
                 if (pads[k] && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pads[k])) == e.cdevice.which) {
                     SDL_GameControllerClose(pads[k]);
@@ -95,10 +137,16 @@ void port_pump_events(void) {
                 }
             break;
         case SDL_KEYDOWN:
-            key_buttons |= key_bit(e.key.keysym.sym, e.key.keysym.scancode);
+            if (!e.key.repeat) btn_press(key_bit(e.key.keysym.sym, e.key.keysym.scancode));
             break;
         case SDL_KEYUP:
-            key_buttons &= ~key_bit(e.key.keysym.sym, e.key.keysym.scancode);
+            btn_release(key_bit(e.key.keysym.sym, e.key.keysym.scancode));
+            break;
+        case SDL_CONTROLLERBUTTONDOWN:
+            btn_press(pad_bit(e.cbutton.button));
+            break;
+        case SDL_CONTROLLERBUTTONUP:
+            btn_release(pad_bit(e.cbutton.button));
             break;
         case SDL_FINGERDOWN:
             if (!touch_down || release_next) {
@@ -218,22 +266,7 @@ int sceCtrlPeekBufferPositive(int port, SceCtrlData *d, int count) {
     for (int k = 0; k < 4; k++) {
         SDL_GameController *c = pads[k];
         if (!c) continue;
-#define B(sdl, sce) if (SDL_GameControllerGetButton(c, sdl)) b |= sce
-        B(SDL_CONTROLLER_BUTTON_A, SCE_CTRL_CROSS);
-        B(SDL_CONTROLLER_BUTTON_B, SCE_CTRL_CIRCLE);
-        B(SDL_CONTROLLER_BUTTON_X, SCE_CTRL_SQUARE);
-        B(SDL_CONTROLLER_BUTTON_Y, SCE_CTRL_TRIANGLE);
-        B(SDL_CONTROLLER_BUTTON_LEFTSHOULDER, SCE_CTRL_LTRIGGER);
-        B(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER, SCE_CTRL_RTRIGGER);
-        B(SDL_CONTROLLER_BUTTON_START, SCE_CTRL_START);
-        B(SDL_CONTROLLER_BUTTON_BACK, SCE_CTRL_SELECT);
-        B(SDL_CONTROLLER_BUTTON_DPAD_UP, SCE_CTRL_UP);
-        B(SDL_CONTROLLER_BUTTON_DPAD_DOWN, SCE_CTRL_DOWN);
-        B(SDL_CONTROLLER_BUTTON_DPAD_LEFT, SCE_CTRL_LEFT);
-        B(SDL_CONTROLLER_BUTTON_DPAD_RIGHT, SCE_CTRL_RIGHT);
-        B(SDL_CONTROLLER_BUTTON_LEFTSTICK, SCE_CTRL_L3);
-        B(SDL_CONTROLLER_BUTTON_RIGHTSTICK, SCE_CTRL_R3);
-#undef B
+        /* buttons arrive as events (see port_pump_events), so quick taps aren't lost */
         /* the analog triggers work as L / R too */
         if (SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 16000) b |= SCE_CTRL_LTRIGGER;
         if (SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 16000) b |= SCE_CTRL_RTRIGGER;
