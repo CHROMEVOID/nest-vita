@@ -9,7 +9,14 @@
 #include <psp2/io/stat.h>
 #include <psp2/kernel/sysmem.h>
 #include <psp2/sysmodule.h>
+#if !defined(NEST_PORT) || defined(NEST_HAVE_LIBJPEG)
+#define NEST_USE_LIBJPEG 1
 #include <jpeglib.h>
+#else
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STBI_WRITE_NO_STDIO_FILE_FUNCS_UNUSED
+#include "../third_party/stb_image_write.h"
+#endif
 
 #define THUMB_DIR DATA_DIR "/thumbs"
 #define TW 480
@@ -62,6 +69,7 @@ static void close_video(void) {
     active = 0;
 }
 
+#ifdef NEST_USE_LIBJPEG
 static int write_jpeg(const char *path, const uint8_t *rgba, int w, int h, int stride) {
     FILE *f = fopen(path, "wb");
     if (!f) return 0;
@@ -86,6 +94,19 @@ static int write_jpeg(const char *path, const uint8_t *rgba, int w, int h, int s
     fclose(f);
     return 1;
 }
+#else
+static int write_jpeg(const char *path, const uint8_t *rgba, int w, int h, int stride) {
+    /* stb writes tightly packed rows */
+    uint8_t *tight = malloc((size_t)w * h * 4);
+    if (!tight) return 0;
+    for (int y = 0; y < h; y++) memcpy(tight + (size_t)y * w * 4, rgba + (size_t)y * stride, (size_t)w * 4);
+    char real[1024];
+    port_path(path, real, sizeof(real));
+    int ok = stbi_write_jpg(real, w, h, 4, tight, 86);
+    free(tight);
+    return ok;
+}
+#endif
 
 /* is this frame worth keeping? skip near-black or flat frames */
 static int interesting(const uint8_t *p, int w, int h, int stride) {

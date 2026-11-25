@@ -22,8 +22,14 @@ static int nents, cap;
 static int focus, nvid, nbook, nsong;
 static float psy, psy_t, pfsel;
 
+#ifdef NEST_PORT
+static const char *DEVICES[6], *DEVICE_NAMES[6];
+static int ndevices;
+#else
 static const char *DEVICES[] = {"ux0:", "uma0:", "imc0:", "xmc0:", "grw0:", "ur0:"};
 static const char *DEVICE_NAMES[] = {"Memory card", "USB / SD2Vita", "Internal storage", "External card", "Game card", "System (ur0)"};
+static const int ndevices = 6;
+#endif
 
 static int image_mode(void) { return purpose == PICK_POSTER || purpose == PICK_LOGO || purpose == PICK_BACKDROP; }
 
@@ -59,7 +65,10 @@ static int pcmp(const void *a, const void *b) {
 static void list(void) {
     nents = nvid = nbook = nsong = 0;
     if (!path[0]) {
-        for (int i = 0; i < 6; i++) {
+#ifdef NEST_PORT
+        ndevices = port_devices(DEVICES, DEVICE_NAMES, 6);
+#endif
+        for (int i = 0; i < ndevices; i++) {
             char p[16];
             snprintf(p, sizeof(p), "%s", DEVICES[i]);
             if (nents == cap) {

@@ -1,5 +1,6 @@
 /* CBR (RAR comic) support through the unrar library. */
 #include "nest.h"
+#if !defined(NEST_PORT) || defined(NEST_HAVE_UNRAR)
 
 #include <wchar.h>
 #define _UNIX
@@ -94,3 +95,8 @@ void *rar_read(const char *path, const char *name, size_t *size) {
     if (size) *size = s.len;
     return s.buf;
 }
+#else
+#include "cbr.h"
+int rar_list(const char *path, char ***names_out) { (void)path; *names_out = NULL; return 0; }
+void *rar_read(const char *path, const char *name, size_t *size) { (void)path; (void)name; *size = 0; return NULL; }
+#endif

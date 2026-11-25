@@ -11,3 +11,10 @@ tools/nest_pc_server.json
 tools/spotify_keys.txt
 tools/nest_music_cache.json
 tools/*.bak
+android/deps/
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/local.properties
+*.jks

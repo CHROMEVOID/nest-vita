@@ -5,8 +5,14 @@
 
 #include <setjmp.h>
 #include <psp2/kernel/threadmgr.h>
+#if !defined(NEST_PORT) || defined(NEST_HAVE_LIBJPEG)
+#define NEST_USE_LIBJPEG 1
 #include <jpeglib.h>
+#endif
+#if !defined(NEST_PORT) || defined(NEST_HAVE_WEBP)
+#define NEST_USE_WEBP 1
 #include <webp/decode.h>
+#endif
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_HDR
@@ -116,11 +122,13 @@ static void *book_cover(const char *path, size_t *len) {
 
 /* ---------------- decoding ---------------- */
 
+#ifdef NEST_USE_LIBJPEG
 struct jerr_t {
     struct jpeg_error_mgr pub;
     jmp_buf jb;
 };
 static void jerr_exit(j_common_ptr c) { longjmp(((struct jerr_t *)c->err)->jb, 1); }
+#endif
 
 static void target_size(int sw, int sh, int maxw, int maxh, int *dw, int *dh) {
     float s;
@@ -166,7 +174,9 @@ static uint8_t *decode_mem(const uint8_t *buf, size_t len, int maxw, int maxh, i
     if (len < 12) return NULL;
     int w = 0, h = 0;
     uint8_t *px = NULL;
-    if (buf[0] == 0xFF && buf[1] == 0xD8) {
+    if (0) {
+#ifdef NEST_USE_LIBJPEG
+    } else if (buf[0] == 0xFF && buf[1] == 0xD8) {
         struct jpeg_decompress_struct ci;
         struct jerr_t je;
         ci.err = jpeg_std_error(&je.pub);
@@ -202,12 +212,15 @@ static uint8_t *decode_mem(const uint8_t *buf, size_t len, int maxw, int maxh, i
         }
         jpeg_finish_decompress(&ci);
         jpeg_destroy_decompress(&ci);
+#endif
+#ifdef NEST_USE_WEBP
     } else if (!memcmp(buf, "RIFF", 4) && !memcmp(buf + 8, "WEBP", 4)) {
         uint8_t *d = WebPDecodeRGBA(buf, len, &w, &h);
         if (!d) return NULL;
         px = malloc((size_t)w * h * 4);
         if (px) memcpy(px, d, (size_t)w * h * 4);
         WebPFree(d);
+#endif
     } else {
         int n;
         px = stbi_load_from_memory(buf, (int)len, &w, &h, &n, 4);

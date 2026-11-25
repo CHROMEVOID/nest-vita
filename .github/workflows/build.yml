@@ -71,3 +71,42 @@ jobs:
           path: |
             build/Nest.vpk
             build.log
+
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: Libraries
+        run: bash android/fetch_deps.sh
+      - name: Signing key
+        env:
+          KS: ${{ secrets.NEST_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > $RUNNER_TEMP/nest.jks
+            echo "NEST_KEYSTORE_FILE=$RUNNER_TEMP/nest.jks" >> $GITHUB_ENV
+          else
+            echo "no signing key secret: the APK gets a debug signature"
+          fi
+      - name: Build
+        env:
+          NEST_KEY_PASS: ${{ secrets.NEST_KEY_PASS }}
+        working-directory: android
+        run: |
+          gradle --no-daemon assembleRelease 2>&1 | tee ../apk.log
+          test -f app/build/outputs/apk/release/app-release.apk
+          cp app/build/outputs/apk/release/app-release.apk ../Nest.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Nest-apk
+          path: |
+            Nest.apk
+            apk.log

@@ -1,0 +1,79 @@
+plugins { id 'com.android.application' }
+
+def repo = rootProject.projectDir.parentFile
+def genAssets = layout.buildDirectory.dir("nestassets")
+
+android {
+    namespace 'com.chromevoid.nest'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.chromevoid.nest'
+        minSdk 26
+        targetSdk 34
+        versionCode 1100 + (System.getenv("GITHUB_RUN_NUMBER") ?: "0").toInteger()
+        versionName '1.2'
+        ndk { abiFilters 'arm64-v8a' }
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_STL=c++_static', '-DCMAKE_BUILD_TYPE=Release'
+            }
+        }
+    }
+
+    signingConfigs {
+        release {
+            def ks = System.getenv("NEST_KEYSTORE_FILE")
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv("NEST_KEY_PASS")
+                keyAlias 'nest'
+                keyPassword System.getenv("NEST_KEY_PASS")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig System.getenv("NEST_KEYSTORE_FILE") ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    externalNativeBuild {
+        cmake { path 'jni/CMakeLists.txt' }
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs += ["${rootProject.projectDir}/deps/SDL2/android-project/app/src/main/java"]
+            assets.srcDirs += [genAssets]
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    packagingOptions { jniLibs { useLegacyPackaging true } }
+    lint { abortOnError false; checkReleaseBuilds false }
+}
+
+/* Nest's fonts and scenes, plus files.txt: a build stamp, then every file (see port/assets.c) */
+tasks.register('nestAssets') {
+    def out = genAssets.get().asFile
+    def src = new File(repo, "assets")
+    inputs.dir(src)
+    outputs.dir(out)
+    doLast {
+        project.delete(out)
+        project.copy { from src; into new File(out, "assets") }
+        def files = []
+        new File(out, "assets").eachFileRecurse(groovy.io.FileType.FILES) { f ->
+            files << out.toPath().relativize(f.toPath()).toString().replace(File.separator, "/")
+        }
+        files.sort()
+        new File(out, "files.txt").text = "build-" + System.currentTimeMillis() + "\n" + files.join("\n") + "\n"
+    }
+}
+preBuild.dependsOn nestAssets

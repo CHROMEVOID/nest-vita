@@ -330,7 +330,9 @@ void detail_frame(float dt) {
     }
 
     /* ---------- layout + scrolling ---------- */
-    float list_top = 400;
+    /* the list starts below the buttons, wherever a long description pushed them */
+    static float btn_rel = 346;
+    float list_top = fmaxf(400, btn_rel + 46 + 40);
     float row_h = 84;
     float list_y = list_top + (nseasons > 1 ? 52 : 8);
     float more_y = (has_list ? list_y + nents * row_h + 24 : 380);
@@ -433,6 +435,7 @@ void detail_frame(float dt) {
 
     /* buttons */
     float bty = fmaxf(y + 8, y0 + 300);
+    btn_rel = bty - y0;
     char lab[64];
     if (t->resume >= 0 && t->kind != KIND_MOVIE) {
         char el[32];
