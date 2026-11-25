@@ -98,6 +98,12 @@ int sceKernelGetFreeMemorySize(SceKernelFreeMemorySizeInfo *info);
 #define SCE_S_ISREG(m) (((m) & 0xF000) == SCE_S_IFREG)
 #define SCE_CST_MODE 0x0001
 #define SCE_CST_SIZE 0x0004
+/* Android's libc makes st_atime/st_mtime/st_ctime macros (for struct stat's
+   timespecs); the Vita's SceIoStat uses those names for its own fields */
+#include <sys/stat.h>
+#undef st_atime
+#undef st_mtime
+#undef st_ctime
 typedef struct SceIoStat {
     int st_mode;
     unsigned int st_attr;

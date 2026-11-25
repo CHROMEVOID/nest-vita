@@ -416,9 +416,15 @@ static void fill_stat(const struct stat *s, SceIoStat *o) {
     memset(o, 0, sizeof(*o));
     o->st_mode = S_ISDIR(s->st_mode) ? SCE_S_IFDIR | 0777 : SCE_S_IFREG | 0666;
     o->st_size = s->st_size;
+#ifdef __ANDROID__
+    to_dt(s->st_mtim.tv_sec, &o->st_mtime);
+    to_dt(s->st_mtim.tv_sec, &o->st_ctime);
+    to_dt(s->st_atim.tv_sec, &o->st_atime);
+#else
     to_dt(s->st_mtime, &o->st_mtime);
     to_dt(s->st_mtime, &o->st_ctime);
     to_dt(s->st_atime, &o->st_atime);
+#endif
 }
 
 static int oflags(int f) {
