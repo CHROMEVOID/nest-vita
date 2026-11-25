@@ -116,3 +116,43 @@ jobs:
           path: |
             Nest.apk
             apk.log
+
+  android-emulator-test:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: Libraries
+        run: bash android/fetch_deps.sh
+      - name: Build for the emulator (x86_64)
+        working-directory: android
+        run: |
+          gradle --no-daemon assembleRelease -PnestAbis=x86_64 -q
+          cp app/build/outputs/apk/release/app-release.apk ../Nest-x86.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get install -y ffmpeg > /dev/null || true
+      - name: Run Nest in the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -no-snapshot
+          script: bash android/emu_test.sh Nest-x86.apk emu_out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Nest-emulator-test
+          path: emu_out
