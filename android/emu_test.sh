@@ -37,7 +37,7 @@ key KEYCODE_X                       # Pick a folder
 shot 04_devices 3
 key KEYCODE_X                       # Internal storage
 shot 05_storage 3
-for i in 1 2 3 4 5 6; do key KEYCODE_DPAD_DOWN; done
+for i in 1 2 3 4 5 6 7; do key KEYCODE_DPAD_DOWN; done
 shot 06_movies_hl 2
 key KEYCODE_V                       # use the highlighted folder
 shot 07_sort 3
@@ -65,7 +65,7 @@ shot 18_seek 6
 key KEYCODE_C
 shot 19_back 4
 key KEYCODE_C
-key KEYCODE_E; key KEYCODE_E
+key KEYCODE_E; key KEYCODE_E; key KEYCODE_E; key KEYCODE_E
 shot 20_tab 4
 key KEYCODE_E
 shot 21_tab2 4
